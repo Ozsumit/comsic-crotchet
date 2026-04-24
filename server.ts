@@ -191,7 +191,7 @@ async function startServer() {
             <div style="background-color: #fff0f3; padding: 15px; border-radius: 8px; margin: 20px 0;">
               <p style="margin: 0; font-size: 14px; text-transform: uppercase; color: #666;">Tracking ID</p>
               <h3 style="margin: 5px 0 0 0; color: #ff6b81; font-family: monospace;">${trackingId}</h3>
-              <h3 style="margin: 5px 0 0 0; color: #c3f0c2; font-family: monospace;"><a href="https://crotchet.sumit.info.np/track/${trackingId}" target="_blank" rel="noopener noreferrer">${trackingId}</a></h3>
+              <h3 style="margin: 5px 0 0 0; color: #c3f0c2; font-family: monospace;"><a href="https://crotchet.sumit.info.np/track?id=${trackingId}" target="_blank" rel="noopener noreferrer">Track Your Order</a></h3>
 
             </div>
             
