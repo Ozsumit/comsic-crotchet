@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=Dancing+Script:wght@500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-theme-bg: #FAFAFA;
+  --color-theme-text: #27272A;
+  --color-theme-muted: #71717A;
+  --color-theme-brand: #F472B6;
+  --color-theme-light-pink: #FDF2F8;
+  --color-theme-border: #F4F4F5;
+  --color-theme-hover: #F4F4F5;
+  --color-theme-hero-bg: #FFFAFB;
+  --color-theme-hero-text: #3F3F46;
+  --color-theme-hero-muted: #71717A;
+  --color-theme-hero-accent: #F472B6;
+  --color-theme-light-yellow: #FFFBEB;
+  --color-theme-dark-yellow: #FEF3C7;
+  --color-theme-light-purple: #F5F3FF;
+  --color-theme-dark-purple: #DDD6FE;
+  --color-theme-light-pink-box: #FDF2F8;
+  --color-theme-dark-pink-box: #FBCFE8;
+  --color-theme-light-green: #F0FDF4;
+
+  --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Dancing Script', cursive;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-theme-bg);
+  color: var(--color-theme-text);
+  -webkit-font-smoothing: antialiased;
+}
