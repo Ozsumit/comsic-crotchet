@@ -5,8 +5,10 @@ import Database from "better-sqlite3";
 import multer from "multer";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import nodemailer from "nodemailer"; // <-- 1. Import Nodemailer
-import dotenv from "dotenv";
+import nodemailer from "nodemailer";
+import dotenv from "dotenv"; // <-- 1. Import dotenv
+
+// <-- 2. Load the .env file immediately
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,13 +20,12 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// --- 2. Setup Nodemailer Transporter ---
-// (Replace with your actual email and an App Password)
+// --- 3. Setup Nodemailer Transporter ---
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: process.env.EMAIL_USER, // Now this will work!
+    pass: process.env.EMAIL_PASS, // Now this will work!
   },
 });
 
@@ -178,12 +179,12 @@ async function startServer() {
         items,
       );
 
-      // --- 3. SEND ACTUAL EMAIL ---
-      // We do this asynchronously so it doesn't slow down the response to the user
+      // --- SEND ACTUAL EMAIL ---
       const mailOptions = {
-        from: '"Cute Crochets Shop" <your-email@gmail.com>', // Sender address
-        to: email, // Receiver address (customer)
-        subject: "Yay! Your Order is Confirmed ✨", // Subject line
+        // <-- 4. Changed this to use your env variable
+        from: `"Cute Crochets Shop" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: "Yay! Your Order is Confirmed ✨",
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
             <h2 style="color: #ff6b81;">Order Confirmed! 🎉</h2>

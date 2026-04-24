@@ -52,6 +52,7 @@ export function Checkout() {
         console.log(
           `[Email sent to ${email}] Your order has been placed! Track it here with tracking ID: ${data.trackingId}`,
         );
+        console.log(process.env.EMAIL_USER, process.env.EMAIL_PASS);
       } else {
         alert("Failed to place order. Please try again.");
       }
