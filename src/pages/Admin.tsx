@@ -319,7 +319,7 @@ export function Admin() {
                           </select>
                         </td>
                         <td className="p-5 font-medium text-xl text-right text-theme-text group-hover:bg-theme-bg/50 transition-colors">
-                          ${order.total.toFixed(2)}
+                          Rs. {order.total.toFixed(2)}
                         </td>
                         <td className="p-5 group-hover:bg-theme-bg/50 transition-colors text-center">
                           <button
@@ -395,7 +395,7 @@ export function Admin() {
                         {product.category}
                       </td>
                       <td className="p-5 font-medium text-theme-text">
-                        ${product.price.toFixed(2)}
+                        Rs. {product.price.toFixed(2)}
                       </td>
                       <td className="p-5">
                         <span
@@ -451,7 +451,7 @@ export function Admin() {
               </div>
               <div className="col-span-2 sm:col-span-1">
                 <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
-                  Price ($)
+                  Price (Rs. )
                 </label>
                 <input
                   required
@@ -584,7 +584,7 @@ export function Admin() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
-                      Price ($)
+                      Price (Rs. )
                     </label>
                     <input
                       required
