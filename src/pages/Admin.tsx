@@ -177,7 +177,7 @@ export function Admin() {
               />
               {authError && (
                 <p className="text-red-500 text-sm mt-3 font-normal px-2 uppercase tracking-wide">
-                  Incorrect password. Try 'pastelstitches'.
+                  Incorrect password. Try 'Comsic11'.
                 </p>
               )}
             </div>
