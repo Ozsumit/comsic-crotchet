@@ -6,6 +6,8 @@ import multer from "multer";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import nodemailer from "nodemailer"; // <-- 1. Import Nodemailer
+import dotenv from "dotenv";
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,8 +23,8 @@ if (!fs.existsSync(uploadsDir)) {
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "pokhrelsumit36@gmail.com", // Replace with your email
-    pass: "lfut ieuk lnwx xjku",
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
