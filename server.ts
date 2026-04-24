@@ -136,7 +136,55 @@ async function startServer() {
 
     res.json({ id: info.lastInsertRowid, ...req.body, imageUrl });
   });
+  // --- ADD THESE NEW ROUTES ---
 
+  // Update Product details and stock
+  app.patch("/api/products/:id", (req, res) => {
+    const { title, price, category, stock, description } = req.body;
+    try {
+      db.prepare(
+        `
+        UPDATE products 
+        SET title = ?, price = ?, category = ?, stock = ?, description = ?
+        WHERE id = ?
+      `,
+      ).run(title, price, category, stock, description, req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update product" });
+    }
+  });
+
+  // Delete a Product
+  app.delete("/api/products/:id", (req, res) => {
+    try {
+      // Optional: Delete related order items first, or just delete the product
+      db.prepare("DELETE FROM order_items WHERE productId = ?").run(
+        req.params.id,
+      );
+      db.prepare("DELETE FROM products WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to delete product" });
+    }
+  });
+
+  // Delete an Order
+  app.delete("/api/orders/:id", (req, res) => {
+    try {
+      // We must delete the items associated with the order first due to foreign keys
+      db.prepare("DELETE FROM order_items WHERE orderId = ?").run(
+        req.params.id,
+      );
+      db.prepare("DELETE FROM orders WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to delete order" });
+    }
+  });
   // Create an order
   app.post("/api/orders", (req, res) => {
     const { customerName, email, address, items, total, paymentMethod } =
