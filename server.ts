@@ -49,6 +49,18 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Verify email setup on server start
+transporter.verify((error) => {
+  if (error) {
+    console.error(
+      "🚨 Nodemailer Error: Please check your EMAIL_USER and EMAIL_PASS.",
+      error,
+    );
+  } else {
+    console.log("✅ Mail server is ready to send invoices.");
+  }
+});
+
 // --- Database Initialization ---
 async function setupDatabase() {
   await pool.query(`
@@ -84,7 +96,6 @@ async function setupDatabase() {
     );
   `);
 
-  // Zero-Downtime Migration: Handled via safe JS to avoid PL/pgSQL syntax issues
   try {
     const colCheck = await pool.query(`
       SELECT column_name 
@@ -96,18 +107,12 @@ async function setupDatabase() {
       console.log(
         "Database Migration: Converting 'imageUrl' string to 'imageUrls' array...",
       );
-
-      // 1. Ensure the new column exists
       await pool.query(
         `ALTER TABLE products ADD COLUMN IF NOT EXISTS "imageUrls" TEXT[] DEFAULT '{}'`,
       );
-
-      // 2. Transfer existing strings into an array gracefully
       await pool.query(
         `UPDATE products SET "imageUrls" = ARRAY["imageUrl"] WHERE "imageUrl" IS NOT NULL AND "imageUrl" != ''`,
       );
-
-      // 3. Drop the old column
       await pool.query(`ALTER TABLE products DROP COLUMN "imageUrl"`);
       console.log("Database Migration completed successfully.");
     }
@@ -147,7 +152,6 @@ async function startServer() {
   // PRODUCT ROUTES
   // ─────────────────────────────────────────────
 
-  // GET all unique categories
   app.get("/api/categories", async (req, res) => {
     try {
       const result = await pool.query(
@@ -162,7 +166,6 @@ async function startServer() {
     }
   });
 
-  // GET all products (with backward compatible imageUrl alias)
   app.get("/api/products", async (req, res) => {
     const { category, search, sort, limit } = req.query;
 
@@ -174,20 +177,14 @@ async function startServer() {
       query += ` AND category = $${i++}`;
       params.push(category);
     }
-
     if (search) {
       query += ` AND (title ILIKE $${i} OR description ILIKE $${i + 1})`;
       params.push(`%${search}%`, `%${search}%`);
       i += 2;
     }
-
-    if (sort === "price-asc") {
-      query += " ORDER BY price ASC";
-    } else if (sort === "price-desc") {
-      query += " ORDER BY price DESC";
-    } else {
-      query += " ORDER BY id DESC";
-    }
+    if (sort === "price-asc") query += " ORDER BY price ASC";
+    else if (sort === "price-desc") query += " ORDER BY price DESC";
+    else query += " ORDER BY id DESC";
 
     if (limit) {
       query += ` LIMIT $${i++}`;
@@ -203,7 +200,6 @@ async function startServer() {
     }
   });
 
-  // GET single product by ID
   app.get("/api/products/:id", async (req, res) => {
     try {
       const result = await pool.query(
@@ -218,17 +214,14 @@ async function startServer() {
     }
   });
 
-  // POST create a new product (handles multiple image uploads)
   app.post(
     "/api/products",
     (req, res, next) => {
       upload.array("images", 10)(req, res, (err) => {
-        if (err) {
-          console.error("🚨 CLOUDINARY UPLOAD ERROR:", err);
+        if (err)
           return res
             .status(500)
             .json({ error: "Image upload failed", details: err });
-        }
         next();
       });
     },
@@ -239,7 +232,7 @@ async function startServer() {
 
       try {
         const { title, description, price, category, stock } = req.body;
-        const imageUrls = req.files.map((file) => file.path); // Array of Cloudinary URLs
+        const imageUrls = req.files.map((file) => file.path);
 
         const result = await pool.query(
           `INSERT INTO products (title, description, price, "imageUrls", category, stock)
@@ -264,7 +257,6 @@ async function startServer() {
     },
   );
 
-  // PATCH update a product
   app.patch(
     "/api/products/:id",
     upload.array("images", 10),
@@ -273,10 +265,8 @@ async function startServer() {
         const { title, description, price, category, stock } = req.body;
         let imageUrls = null;
 
-        // If new files are supplied, overwrite images
-        if (req.files && req.files.length > 0) {
+        if (req.files && req.files.length > 0)
           imageUrls = req.files.map((f) => f.path);
-        }
 
         const fields = [];
         const params = [];
@@ -307,9 +297,8 @@ async function startServer() {
           params.push(imageUrls);
         }
 
-        if (fields.length === 0) {
+        if (fields.length === 0)
           return res.status(400).json({ error: "No fields to update" });
-        }
 
         params.push(req.params.id);
         const result = await pool.query(
@@ -327,7 +316,6 @@ async function startServer() {
     },
   );
 
-  // DELETE a product
   app.delete("/api/products/:id", async (req, res) => {
     try {
       await pool.query(`DELETE FROM order_items WHERE "productId" = $1`, [
@@ -345,7 +333,6 @@ async function startServer() {
   // ORDER ROUTES
   // ─────────────────────────────────────────────
 
-  // POST create an order
   app.post("/api/orders", async (req, res) => {
     const { customerName, phone, email, address, items, total, paymentMethod } =
       req.body;
@@ -357,6 +344,7 @@ async function startServer() {
 
     try {
       await client.query("BEGIN");
+
       const orderResult = await client.query(
         `INSERT INTO orders ("trackingId", "customerName", phone, email, address, "paymentMethod", total)
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
@@ -364,41 +352,115 @@ async function startServer() {
       );
       const orderId = orderResult.rows[0].id;
 
+      let itemsHtml = "";
+
       for (const item of items) {
+        const pId = item.productId || item.id; // Support both front-end structures
+
+        // Fetch product title for the email invoice
+        const productRes = await client.query(
+          "SELECT title FROM products WHERE id = $1",
+          [pId],
+        );
+        const productTitle = productRes.rows[0]?.title || "Unknown Product";
+        const itemTotal = item.quantity * item.price;
+
+        // Build HTML table rows for the invoice
+        itemsHtml += `
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #eee; color: #333; font-size: 14px;">${productTitle}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right; color: #333; font-size: 14px;">Rs. ${Number(item.price).toFixed(2)}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center; color: #333; font-size: 14px;">${item.quantity}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right; color: #333; font-size: 14px; font-weight: bold;">Rs. ${itemTotal.toFixed(2)}</td>
+          </tr>
+        `;
+
         await client.query(
           `INSERT INTO order_items ("orderId", "productId", quantity, price) VALUES ($1, $2, $3, $4)`,
-          [orderId, item.productId, item.quantity, item.price],
+          [orderId, pId, item.quantity, item.price],
         );
         await client.query(
-          `UPDATE products SET stock = stock - $1 WHERE id = $2`,
-          [item.quantity, item.productId],
+          `UPDATE products SET stock = GREATEST(stock - $1, 0) WHERE id = $2`,
+          [item.quantity, pId],
         );
       }
 
       await client.query("COMMIT");
 
-      // Send confirmation email
+      // Construct a strictly formatted HTML Invoice/Bill
       const mailOptions = {
         from: `"Cute Crochets Shop" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: "Yay! Your Order is Confirmed ✨",
+        subject: `Invoice for Order #${trackingId}`,
         html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-            <h2 style="color: #ff6b81;">Order Confirmed! 🎉</h2>
-            <p>Hi ${customerName},</p>
-            <p>Thank you for your purchase! Your cute crochets are getting ready to ship.</p>
-            <div style="background-color: #fff0f3; padding: 15px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0; font-size: 14px; text-transform: uppercase; color: #666;">Tracking ID</p>
-              <h3 style="margin: 5px 0 0 0; color: #ff6b81; font-family: monospace;">${trackingId}</h3>
+          <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+            
+            <!-- Header -->
+            <div style="background-color: #ff6b81; color: white; padding: 25px; text-align: center;">
+              <h1 style="margin: 0; font-size: 26px; text-transform: uppercase; letter-spacing: 2px;">Itemized Invoice</h1>
+              <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Thank you for shopping with Cute Crochets!</p>
             </div>
-            <p><strong>Total:</strong> $${total.toFixed(2)}</p>
+            
+            <div style="padding: 30px;">
+              
+              <!-- Customer & Tracking Info (Using table for email-client safety) -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 20px;">
+                <tr>
+                  <td valign="top" style="width: 50%;">
+                    <p style="margin: 0 0 5px 0; color: #888; font-size: 11px; text-transform: uppercase; font-weight: bold;">Billed To</p>
+                    <h3 style="margin: 0 0 5px 0; color: #333; font-size: 18px;">${customerName}</h3>
+                    <p style="margin: 0 0 3px 0; color: #555; font-size: 14px;">${email}</p>
+                    <p style="margin: 0; color: #555; font-size: 14px;">${phone}</p>
+                  </td>
+                  <td valign="top" style="width: 50%; text-align: right;">
+                    <p style="margin: 0 0 5px 0; color: #888; font-size: 11px; text-transform: uppercase; font-weight: bold;">Order / Tracking ID</p>
+                    <h3 style="margin: 0 0 5px 0; color: #ff6b81; font-size: 18px;">${trackingId}</h3>
+                    <p style="margin: 0; color: #555; font-size: 14px;">Date: ${new Date().toLocaleDateString()}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Itemized Table -->
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                <thead>
+                  <tr style="background-color: #fcfcfc;">
+                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; color: #666; font-size: 13px; text-transform: uppercase;">Product Description</th>
+                    <th style="padding: 12px; text-align: right; border-bottom: 2px solid #ddd; color: #666; font-size: 13px; text-transform: uppercase;">Unit Price</th>
+                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd; color: #666; font-size: 13px; text-transform: uppercase;">Qty</th>
+                    <th style="padding: 12px; text-align: right; border-bottom: 2px solid #ddd; color: #666; font-size: 13px; text-transform: uppercase;">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml}
+                </tbody>
+              </table>
+
+              <!-- Total & Payment Method -->
+              <div style="border-top: 2px solid #eee; padding-top: 15px; text-align: right;">
+                <h2 style="margin: 0; color: #333; font-size: 22px;">Total Bill: Rs. ${Number(total).toFixed(2)}</h2>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Payment Method: <strong>${paymentMethod || "Online"}</strong></p>
+              </div>
+
+              <!-- Shipping Address Box -->
+              <div style="margin-top: 30px; background-color: #f9f9f9; padding: 15px; border-radius: 6px; border: 1px solid #eee;">
+                <h4 style="margin: 0 0 8px 0; color: #333; font-size: 14px; text-transform: uppercase;">Shipping Address</h4>
+                <p style="margin: 0; color: #555; font-size: 14px; line-height: 1.5;">${address}</p>
+              </div>
+
+            </div>
           </div>
         `,
       };
 
-      transporter
-        .sendMail(mailOptions)
-        .catch((err) => console.error("Email err:", err));
+      // Ensure the email is dispatched and log any errors
+      try {
+        console.log(`Attempting to send invoice email to: ${email}`);
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ Invoice email sent successfully to ${email}`);
+      } catch (emailErr) {
+        console.error("🚨 CRITICAL: Failed to send invoice email:", emailErr);
+      }
+
       res.json({ success: true, orderId, trackingId });
     } catch (err) {
       await client.query("ROLLBACK");
@@ -409,7 +471,6 @@ async function startServer() {
     }
   });
 
-  // GET all orders
   app.get("/api/orders", async (req, res) => {
     try {
       const orders = await pool.query(
@@ -433,7 +494,6 @@ async function startServer() {
     }
   });
 
-  // GET track single order
   app.get("/api/orders/track/:trackingId", async (req, res) => {
     try {
       const result = await pool.query(
@@ -459,7 +519,6 @@ async function startServer() {
     }
   });
 
-  // PATCH update order status
   app.patch("/api/orders/:id/status", async (req, res) => {
     try {
       const { status } = req.body;
@@ -473,7 +532,6 @@ async function startServer() {
     }
   });
 
-  // DELETE an order
   app.delete("/api/orders/:id", async (req, res) => {
     try {
       await pool.query(`DELETE FROM order_items WHERE "orderId" = $1`, [

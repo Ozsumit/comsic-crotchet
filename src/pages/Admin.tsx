@@ -193,15 +193,75 @@ export function Admin() {
     );
   };
 
+  const handleUpdateStock = async (
+    items: OrderItem[],
+    action: "reimburse" | "deduct",
+  ) => {
+    try {
+      // Fetch latest products to ensure we have current inventory stock & IDs
+      const res = await fetch("/api/products");
+      if (!res.ok) return;
+      const currentProducts: Product[] = await res.json();
+
+      let stockUpdated = false;
+
+      for (const item of items) {
+        // Since OrderItem doesn't hold productId, match using title
+        const product = currentProducts.find((p) => p.title === item.title);
+        if (product) {
+          const newStock =
+            action === "reimburse"
+              ? product.stock + item.quantity
+              : Math.max(0, product.stock - item.quantity); // Prevent negative stock if uncancelling
+
+          const formData = new FormData();
+          formData.append("title", product.title);
+          formData.append("price", product.price.toString());
+          formData.append("category", product.category);
+          formData.append("description", product.description);
+          formData.append("stock", newStock.toString());
+
+          const patchRes = await fetch(`/api/products/${product.id}`, {
+            method: "PATCH",
+            body: formData,
+          });
+
+          if (patchRes.ok) {
+            stockUpdated = true;
+          }
+        }
+      }
+
+      // If we modified stocks, fetch the latest to stay synced across tabs
+      if (stockUpdated) {
+        const updatedRes = await fetch("/api/products");
+        if (updatedRes.ok) {
+          const updatedProducts = await updatedRes.json();
+          setProducts(updatedProducts);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to update stocks:", err);
+    }
+  };
+
   const handleDeleteOrder = async (id: number) => {
     if (
       !window.confirm("Are you sure you want to permanently delete this order?")
     )
       return;
+
+    const orderToDelete = orders.find((o) => o.id === id);
+
     try {
       const res = await fetch(`/api/orders/${id}`, { method: "DELETE" });
       if (res.ok) {
         setOrders(orders.filter((o) => o.id !== id));
+
+        // If the order wasn't previously cancelled, we need to reimburse stocks back to inventory
+        if (orderToDelete && orderToDelete.status !== "cancelled") {
+          await handleUpdateStock(orderToDelete.items, "reimburse");
+        }
       } else {
         alert("Failed to delete order.");
       }
@@ -568,6 +628,7 @@ export function Admin() {
                               value={order.status}
                               onChange={async (e) => {
                                 const newStatus = e.target.value;
+                                const oldStatus = order.status;
                                 try {
                                   const res = await fetch(
                                     `/api/orders/${order.id}/status`,
@@ -589,6 +650,25 @@ export function Admin() {
                                           : o,
                                       ),
                                     );
+
+                                    // Handle automatic stock inventory updates
+                                    if (
+                                      oldStatus !== "cancelled" &&
+                                      newStatus === "cancelled"
+                                    ) {
+                                      await handleUpdateStock(
+                                        order.items,
+                                        "reimburse",
+                                      );
+                                    } else if (
+                                      oldStatus === "cancelled" &&
+                                      newStatus !== "cancelled"
+                                    ) {
+                                      await handleUpdateStock(
+                                        order.items,
+                                        "deduct",
+                                      );
+                                    }
                                   } else {
                                     alert("Failed to update status");
                                   }
