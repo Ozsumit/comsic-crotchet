@@ -6,9 +6,8 @@ import multer from "multer";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import nodemailer from "nodemailer";
-import dotenv from "dotenv"; // <-- 1. Import dotenv
+import dotenv from "dotenv";
 
-// <-- 2. Load the .env file immediately
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,12 +19,12 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// --- 3. Setup Nodemailer Transporter ---
+// --- Setup Nodemailer Transporter ---
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER, // Now this will work!
-    pass: process.env.EMAIL_PASS, // Now this will work!
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
@@ -48,6 +47,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     trackingId TEXT UNIQUE,
     customerName TEXT NOT NULL,
+    phone TEXT NOT NULL,
     email TEXT NOT NULL,
     address TEXT NOT NULL,
     paymentMethod TEXT,
@@ -94,7 +94,7 @@ async function startServer() {
       params.push(category);
     }
 
-    query += " ORDER BY id DESC"; // newest first
+    query += " ORDER BY id DESC";
 
     if (limit) {
       query += " LIMIT ?";
@@ -136,7 +136,6 @@ async function startServer() {
 
     res.json({ id: info.lastInsertRowid, ...req.body, imageUrl });
   });
-  // --- ADD THESE NEW ROUTES ---
 
   // Update Product details and stock
   app.patch("/api/products/:id", (req, res) => {
@@ -159,7 +158,6 @@ async function startServer() {
   // Delete a Product
   app.delete("/api/products/:id", (req, res) => {
     try {
-      // Optional: Delete related order items first, or just delete the product
       db.prepare("DELETE FROM order_items WHERE productId = ?").run(
         req.params.id,
       );
@@ -174,7 +172,6 @@ async function startServer() {
   // Delete an Order
   app.delete("/api/orders/:id", (req, res) => {
     try {
-      // We must delete the items associated with the order first due to foreign keys
       db.prepare("DELETE FROM order_items WHERE orderId = ?").run(
         req.params.id,
       );
@@ -185,22 +182,26 @@ async function startServer() {
       res.status(500).json({ error: "Failed to delete order" });
     }
   });
+
   // Create an order
   app.post("/api/orders", (req, res) => {
-    const { customerName, email, address, items, total, paymentMethod } =
+    const { customerName, phone, email, address, items, total, paymentMethod } =
       req.body;
+
     const trackingId =
       "TRK" +
       Date.now() +
       Math.random().toString(36).substring(2, 6).toUpperCase();
 
     const insertTransaction = db.transaction((orderData, orderItems) => {
+      // FIX IS HERE: Added 7 placeholders (?, ?, ?, ?, ?, ?, ?) to match the 7 inserted columns
       const stmt = db.prepare(
-        "INSERT INTO orders (trackingId, customerName, email, address, paymentMethod, total) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO orders (trackingId, customerName, phone, email, address, paymentMethod, total) VALUES (?, ?, ?, ?, ?, ?, ?)",
       );
       const info = stmt.run(
         orderData.trackingId,
         orderData.customerName,
+        orderData.phone,
         orderData.email,
         orderData.address,
         orderData.paymentMethod,
@@ -223,13 +224,20 @@ async function startServer() {
 
     try {
       const orderId = insertTransaction(
-        { trackingId, customerName, email, address, paymentMethod, total },
+        {
+          trackingId,
+          customerName,
+          phone,
+          email,
+          address,
+          paymentMethod,
+          total,
+        },
         items,
       );
 
       // --- SEND ACTUAL EMAIL ---
       const mailOptions = {
-        // <-- 4. Changed this to use your env variable
         from: `"Cute Crochets Shop" <${process.env.EMAIL_USER}>`,
         to: email,
         subject: "Yay! Your Order is Confirmed ✨",
@@ -243,7 +251,6 @@ async function startServer() {
               <p style="margin: 0; font-size: 14px; text-transform: uppercase; color: #666;">Tracking ID</p>
               <h3 style="margin: 5px 0 0 0; color: #ff6b81; font-family: monospace;">${trackingId}</h3>
               <h3 style="margin: 5px 0 0 0; color: #c3f0c2; font-family: monospace;"><a href="https://crotchet.sumit.info.np/track?id=${trackingId}" target="_blank" rel="noopener noreferrer">Track Your Order</a></h3>
-
             </div>
             
             <p><strong>Total Paid:</strong> $${total.toFixed(2)}</p>
@@ -262,11 +269,10 @@ async function startServer() {
           console.log(`Confirmation email sent successfully to ${email}`),
         )
         .catch((err) => console.error("Failed to send email:", err));
-      // ----------------------------
 
       res.json({ success: true, orderId, trackingId });
     } catch (err) {
-      console.error(err);
+      console.error("Order Transaction Error:", err);
       res.status(500).json({ error: "Order failed" });
     }
   });
