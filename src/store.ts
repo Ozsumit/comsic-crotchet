@@ -13,15 +13,7 @@ export interface Product {
 export interface CartItem extends Product {
   quantity: number;
 }
-interface SearchState {
-  globalSearch: string;
-  setGlobalSearch: (term: string) => void;
-}
 
-export const useSearchStore = create<SearchState>((set) => ({
-  globalSearch: "",
-  setGlobalSearch: (term) => set({ globalSearch: term }),
-}));
 interface CartState {
   items: CartItem[];
   addItem: (product: Product) => void;
@@ -31,10 +23,7 @@ interface CartState {
   clearCart: () => void;
   total: () => number;
 }
-export const useSearchStore = create((set) => ({
-  globalSearch: "",
-  setGlobalSearch: (term: string) => set({ globalSearch: term }),
-}));
+
 export const useCartStore = create<CartState>((set, get) => ({
   items: [],
   decreaseItem: (productId: number) =>
