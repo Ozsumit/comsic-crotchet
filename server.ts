@@ -366,12 +366,21 @@ async function startServer() {
         const itemTotal = item.quantity * item.price;
 
         // Build HTML table rows for the invoice
+        // Build HTML table rows for the invoice
         itemsHtml += `
           <tr>
-            <td style="padding: 12px; border-bottom: 1px solid #eee; color: #333; font-size: 14px;">${productTitle}</td>
-            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right; color: #333; font-size: 14px;">Rs. ${Number(item.price).toFixed(2)}</td>
-            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center; color: #333; font-size: 14px;">${item.quantity}</td>
-            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right; color: #333; font-size: 14px; font-weight: bold;">Rs. ${itemTotal.toFixed(2)}</td>
+            <td style="padding: 15px 10px; border-bottom: 1px solid #eeeeee; color: #333333; font-size: 14px; line-height: 1.4;">
+              <strong>${productTitle}</strong>
+            </td>
+            <td style="padding: 15px 10px; border-bottom: 1px solid #eeeeee; text-align: right; color: #555555; font-size: 14px;">
+              Rs. ${Number(item.price).toFixed(2)}
+            </td>
+            <td style="padding: 15px 10px; border-bottom: 1px solid #eeeeee; text-align: center; color: #555555; font-size: 14px;">
+              ${item.quantity}
+            </td>
+            <td style="padding: 15px 10px; border-bottom: 1px solid #eeeeee; text-align: right; color: #333333; font-size: 14px; font-weight: bold;">
+              Rs. ${itemTotal.toFixed(2)}
+            </td>
           </tr>
         `;
 
@@ -391,63 +400,88 @@ async function startServer() {
       const mailOptions = {
         from: `"Pastel Stitches" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: `Invoice for Order #${trackingId}`,
+        subject: `Your Receipt for Order #${trackingId}`,
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-            
-            <!-- Header -->
-            <div style="background-color: #ff6b81; color: white; padding: 25px; text-align: center;">
-              <h1 style="margin: 0; font-size: 26px; text-transform: uppercase; letter-spacing: 2px;">Itemized Invoice</h1>
-              <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Thank you for shopping with Pastel Stitches!</p>
-            </div>
-            
-            <div style="padding: 30px;">
+          <div style="background-color: #f4f4f4; padding: 20px 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
               
-              <!-- Customer & Tracking Info (Using table for email-client safety) -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 20px;">
-                <tr>
-                  <td valign="top" style="width: 50%;">
-                    <p style="margin: 0 0 5px 0; color: #888; font-size: 11px; text-transform: uppercase; font-weight: bold;">Billed To</p>
-                    <h3 style="margin: 0 0 5px 0; color: #333; font-size: 18px;">${customerName}</h3>
-                    <p style="margin: 0 0 3px 0; color: #555; font-size: 14px;">${email}</p>
-                    <p style="margin: 0; color: #555; font-size: 14px;">${phone}</p>
-                  </td>
-                  <td valign="top" style="width: 50%; text-align: right;">
-                    <p style="margin: 0 0 5px 0; color: #888; font-size: 11px; text-transform: uppercase; font-weight: bold;">Order / Tracking ID</p>
-                    <h3 style="margin: 0 0 5px 0; color: #ff6b81; font-size: 18px;">${trackingId}</h3>
-                    <button style="margin-top: 5px; padding: 8px 15px; background-color: #ff6b81; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer;" onclick="window.open('https://www.crotchet.sumit.info.np/track?id=${trackingId}', '_blank')">Track Your Order</button>
-                    <p style="margin: 0; color: #555; font-size: 14px;">Date: ${new Date().toLocaleDateString()}</p>
-                  </td>
-                </tr>
-              </table>
+              <!-- Header -->
+              <div style="background-color: #ff6b81; color: #ffffff; padding: 30px; text-align: center;">
+                <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 1px;">Order Confirmation</h1>
+                <p style="margin: 8px 0 0 0; font-size: 15px; opacity: 0.9;">Thank you for shopping with Pastel Stitches!</p>
+              </div>
+              
+              <div style="padding: 30px;">
+                
+                <!-- Quick Summary Box -->
+                <div style="background-color: #fff0f2; border-left: 4px solid #ff6b81; padding: 15px; margin-bottom: 25px; border-radius: 4px;">
+                  <p style="margin: 0; font-size: 16px; color: #333333;">
+                    <strong>Order Total:</strong> Rs. ${Number(total).toFixed(2)} <br/>
+                    <span style="font-size: 13px; color: #666666;">Payment Method: ${paymentMethod || "Online"}</span>
+                  </p>
+                </div>
 
-              <!-- Itemized Table -->
-              <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
-                <thead>
-                  <tr style="background-color: #fcfcfc;">
-                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd; color: #666; font-size: 13px; text-transform: uppercase;">Product Description</th>
-                    <th style="padding: 12px; text-align: right; border-bottom: 2px solid #ddd; color: #666; font-size: 13px; text-transform: uppercase;">Unit Price</th>
-                    <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd; color: #666; font-size: 13px; text-transform: uppercase;">Qty</th>
-                    <th style="padding: 12px; text-align: right; border-bottom: 2px solid #ddd; color: #666; font-size: 13px; text-transform: uppercase;">Amount</th>
+                <!-- Customer & Tracking Info -->
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 30px;">
+                  <tr>
+                    <td valign="top" style="width: 50%; padding-right: 10px;">
+                      <p style="margin: 0 0 5px 0; color: #888888; font-size: 12px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">Billed To</p>
+                      <h3 style="margin: 0 0 5px 0; color: #333333; font-size: 16px;">${customerName}</h3>
+                      <p style="margin: 0 0 3px 0; color: #555555; font-size: 14px;">${email}</p>
+                      <p style="margin: 0; color: #555555; font-size: 14px;">${phone}</p>
+                    </td>
+                    <td valign="top" style="width: 50%; text-align: right; padding-left: 10px;">
+                      <p style="margin: 0 0 5px 0; color: #888888; font-size: 12px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">Order ID</p>
+                      <h3 style="margin: 0 0 10px 0; color: #ff6b81; font-size: 16px;">${trackingId}</h3>
+                      <p style="margin: 0 0 12px 0; color: #555555; font-size: 13px;">Date: ${new Date().toLocaleDateString()}</p>
+                      
+                      <!-- Bulletproof Email Button -->
+                      <a href="https://crotchet.sumit.info.np/track?id=${trackingId}" target="_blank" style="display: inline-block; padding: 10px 18px; background-color: #ff6b81; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 13px; font-weight: bold;">
+                        Track Your Order
+                      </a>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  ${itemsHtml}
-                </tbody>
-              </table>
+                </table>
 
-              <!-- Total & Payment Method -->
-              <div style="border-top: 2px solid #eee; padding-top: 15px; text-align: right;">
-                <h2 style="margin: 0; color: #333; font-size: 22px;">Total Bill: Rs. ${Number(total).toFixed(2)}</h2>
-                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Payment Method: <strong>${paymentMethod || "Online"}</strong></p>
+                <!-- Itemized Table -->
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+                  <thead>
+                    <tr>
+                      <th style="padding: 10px; text-align: left; border-bottom: 2px solid #dddddd; color: #888888; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Item</th>
+                      <th style="padding: 10px; text-align: right; border-bottom: 2px solid #dddddd; color: #888888; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Price</th>
+                      <th style="padding: 10px; text-align: center; border-bottom: 2px solid #dddddd; color: #888888; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Qty</th>
+                      <th style="padding: 10px; text-align: right; border-bottom: 2px solid #dddddd; color: #888888; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${itemsHtml}
+                  </tbody>
+                </table>
+
+                <!-- Total Alignment -->
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 30px;">
+                  <tr>
+                    <td style="text-align: right;">
+                      <h2 style="margin: 0; color: #333333; font-size: 22px;">Total: Rs. ${Number(total).toFixed(2)}</h2>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Shipping Address Box -->
+                <div style="background-color: #f9f9f9; padding: 20px; border-radius: 6px; border: 1px solid #eeeeee;">
+                  <h4 style="margin: 0 0 10px 0; color: #333333; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Shipping Address</h4>
+                  <p style="margin: 0; color: #555555; font-size: 14px; line-height: 1.6;">${address}</p>
+                </div>
+
               </div>
-
-              <!-- Shipping Address Box -->
-              <div style="margin-top: 30px; background-color: #f9f9f9; padding: 15px; border-radius: 6px; border: 1px solid #eee;">
-                <h4 style="margin: 0 0 8px 0; color: #333; font-size: 14px; text-transform: uppercase;">Shipping Address</h4>
-                <p style="margin: 0; color: #555; font-size: 14px; line-height: 1.5;">${address}</p>
+              
+              <!-- Footer Section -->
+              <div style="background-color: #fafafa; padding: 20px; text-align: center; border-top: 1px solid #eeeeee;">
+                <p style="margin: 0; color: #888888; font-size: 13px;">
+                  Have questions about your order? <br/>
+                  Reply to this email or contact us at <a href="mailto:${process.env.EMAIL_USER}" style="color: #ff6b81; text-decoration: none;">${process.env.EMAIL_USER}</a>.
+                </p>
               </div>
-
             </div>
           </div>
         `,
