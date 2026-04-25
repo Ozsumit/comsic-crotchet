@@ -80,8 +80,9 @@ export function Admin() {
   const [isFetching, setIsFetching] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // State for editing a product
+  // State for editing a product and viewing images
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // --- ORDER MANAGEMENT STATES ---
   const [orderSearch, setOrderSearch] = useState("");
@@ -700,7 +701,12 @@ export function Admin() {
                                                   <img
                                                     src={item.imageUrl}
                                                     alt={item.title}
-                                                    className="w-12 h-12 rounded-lg object-cover border border-gray-200"
+                                                    onClick={() =>
+                                                      setSelectedImage(
+                                                        item.imageUrl!,
+                                                      )
+                                                    }
+                                                    className="w-12 h-12 rounded-lg object-cover border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
                                                   />
                                                 ) : (
                                                   <div className="w-12 h-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
@@ -831,7 +837,8 @@ export function Admin() {
                         <img
                           src={product.imageUrl}
                           alt={product.title}
-                          className="w-12 h-12 object-cover rounded-xl border border-gray-100"
+                          onClick={() => setSelectedImage(product.imageUrl)}
+                          className="w-12 h-12 object-cover rounded-xl border border-gray-100 cursor-pointer hover:opacity-80 transition-opacity"
                         />
                       </td>
                       <td className="p-5">
@@ -913,7 +920,7 @@ export function Admin() {
                   required
                   name="price"
                   type="number"
-                  step="0.01"
+                  step="10"
                   className="w-full px-5 py-4 rounded-full border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white focus:ring-0 outline-none font-medium transition-colors"
                 />
               </div>
@@ -1046,7 +1053,7 @@ export function Admin() {
                       required
                       name="price"
                       type="number"
-                      step="0.01"
+                      step="10"
                       defaultValue={editingProduct.price}
                       className="w-full px-5 py-3 rounded-2xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white outline-none font-medium transition-colors"
                     />
@@ -1105,6 +1112,39 @@ export function Admin() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- ENLARGED IMAGE VIEW MODAL --- */}
+      <AnimatePresence>
+        {selectedImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedImage(null)}
+            className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm cursor-pointer"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-4xl max-h-[90vh] flex flex-col items-center justify-center cursor-auto"
+            >
+              <button
+                onClick={() => setSelectedImage(null)}
+                className="absolute -top-12 right-0 p-2 text-white hover:text-gray-300 transition-colors"
+              >
+                <X className="w-8 h-8" />
+              </button>
+              <img
+                src={selectedImage}
+                alt="Enlarged view"
+                className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl"
+              />
             </motion.div>
           </motion.div>
         )}
