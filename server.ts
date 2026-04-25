@@ -389,7 +389,7 @@ async function startServer() {
 
       // Construct a strictly formatted HTML Invoice/Bill
       const mailOptions = {
-        from: `"Cute Crochets Shop" <${process.env.EMAIL_USER}>`,
+        from: `"Pastel Stitches" <${process.env.EMAIL_USER}>`,
         to: email,
         subject: `Invoice for Order #${trackingId}`,
         html: `
@@ -398,7 +398,7 @@ async function startServer() {
             <!-- Header -->
             <div style="background-color: #ff6b81; color: white; padding: 25px; text-align: center;">
               <h1 style="margin: 0; font-size: 26px; text-transform: uppercase; letter-spacing: 2px;">Itemized Invoice</h1>
-              <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Thank you for shopping with Cute Crochets!</p>
+              <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">Thank you for shopping with Pastel Stitches!</p>
             </div>
             
             <div style="padding: 30px;">
@@ -415,6 +415,7 @@ async function startServer() {
                   <td valign="top" style="width: 50%; text-align: right;">
                     <p style="margin: 0 0 5px 0; color: #888; font-size: 11px; text-transform: uppercase; font-weight: bold;">Order / Tracking ID</p>
                     <h3 style="margin: 0 0 5px 0; color: #ff6b81; font-size: 18px;">${trackingId}</h3>
+                    <button style="margin-top: 5px; padding: 8px 15px; background-color: #ff6b81; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer;" onclick="window.open('https://www.crotchet.sumit.info.np/track?id=${trackingId}', '_blank')">Track Your Order</button>
                     <p style="margin: 0; color: #555; font-size: 14px;">Date: ${new Date().toLocaleDateString()}</p>
                   </td>
                 </tr>
