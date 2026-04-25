@@ -80,6 +80,10 @@ export function Admin() {
   const [isFetching, setIsFetching] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // State for adding products (Preview & Progress)
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+
   // State for editing a product and viewing images
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -210,30 +214,57 @@ export function Admin() {
   };
 
   // --- INVENTORY MANAGEMENT LOGIC ---
-  const handleAddProduct = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewUrl);
+    } else {
+      setImagePreview(null);
+    }
+  };
+
+  const handleAddProduct = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    setUploadProgress(0);
 
-    const formData = new FormData(e.currentTarget);
-    try {
-      const res = await fetch("/api/products", {
-        method: "POST",
-        body: formData,
-      });
-      if (res.ok) {
+    const formElement = e.currentTarget;
+    const formData = new FormData(formElement);
+
+    // Using XMLHttpRequest instead of fetch to track upload progress natively
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/products", true);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(percentComplete);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
         alert("Product added successfully!");
-        (e.target as HTMLFormElement).reset();
+        formElement.reset();
+        setImagePreview(null);
+        setUploadProgress(0);
         fetchCategories(); // Refresh categories in case they added a new one
         setTab("inventory");
       } else {
         alert("Failed to add product.");
       }
-    } catch (err) {
-      console.error(err);
-      alert("Error adding product.");
-    } finally {
       setLoading(false);
-    }
+    };
+
+    xhr.onerror = () => {
+      console.error("XHR Error during upload");
+      alert("Error adding product.");
+      setLoading(false);
+      setUploadProgress(0);
+    };
+
+    xhr.send(formData);
   };
 
   const handleUpdateProduct = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -292,6 +323,13 @@ export function Admin() {
       alert("An error occurred while deleting.");
     }
   };
+
+  // Cleanup object URLs to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
 
   // --- RENDER LOGIN ---
   if (!isAuthenticated) {
@@ -391,7 +429,7 @@ export function Admin() {
         </button>
       </div>
 
-      {/* --- TAB: ORDERS (Collapsed for brevity, no changes needed here) --- */}
+      {/* --- TAB: ORDERS --- */}
       {tab === "orders" && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[800px] max-h-[85vh]">
           {/* Header & Controls */}
@@ -934,7 +972,7 @@ export function Admin() {
                   required
                   name="price"
                   type="number"
-                  step="10"
+                  step="1"
                   className="w-full px-5 py-4 rounded-full border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white focus:ring-0 outline-none font-medium transition-colors"
                 />
               </div>
@@ -987,7 +1025,7 @@ export function Admin() {
                 required
                 name="description"
                 rows={3}
-                className="w-full px-5 py-4 rounded-full border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white focus:ring-0 outline-none font-medium transition-colors resize-none"
+                className="w-full px-5 py-4 rounded-3xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white focus:ring-0 outline-none font-medium transition-colors resize-none"
               ></textarea>
             </div>
 
@@ -995,34 +1033,89 @@ export function Admin() {
               <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
                 Product Image
               </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border border-gray-100 border-dashed rounded-full hover:border-theme-brand hover:bg-theme-hover transition-colors cursor-pointer relative bg-theme-bg">
+              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border border-gray-100 border-dashed rounded-3xl hover:border-theme-brand hover:bg-theme-hover transition-colors cursor-pointer relative bg-theme-bg overflow-hidden group">
                 <input
                   required
                   type="file"
                   name="image"
                   accept="image/*"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  onChange={handleImageChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 />
-                <div className="space-y-4 text-center">
-                  <div className="w-16 h-16 bg-white rounded-full border border-gray-100 flex items-center justify-center mx-auto shadow-sm ">
-                    <ImageIcon className="h-8 w-8 text-theme-brand" />
+
+                {imagePreview ? (
+                  <div className="relative w-full flex flex-col items-center pointer-events-none">
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="h-48 w-auto object-cover rounded-xl shadow-sm mb-3 border border-gray-200"
+                    />
+                    <p className="text-sm font-medium text-theme-brand group-hover:underline">
+                      Click or drag to change image
+                    </p>
                   </div>
-                  <div className="flex text-lg font-medium text-theme-muted justify-center items-center mt-4">
-                    <span className="relative bg-transparent rounded-md font-medium text-theme-brand hover:focus-within:outline-none">
-                      Upload a file
-                    </span>
-                    <p className="pl-1">or drag and drop</p>
+                ) : (
+                  <div className="space-y-4 text-center pointer-events-none">
+                    <div className="w-16 h-16 bg-white rounded-full border border-gray-100 flex items-center justify-center mx-auto shadow-sm group-hover:scale-110 transition-transform">
+                      <ImageIcon className="h-8 w-8 text-theme-brand" />
+                    </div>
+                    <div className="flex text-lg font-medium text-theme-muted justify-center items-center mt-4">
+                      <span className="relative bg-transparent rounded-md font-medium text-theme-brand">
+                        Upload a file
+                      </span>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* File Upload Progress Overlay inside Dropzone */}
+                <AnimatePresence>
+                  {loading && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 bg-white/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-6"
+                    >
+                      <div className="w-full max-w-xs bg-gray-100 rounded-full h-3 mb-3 overflow-hidden shadow-inner border border-gray-200">
+                        <div
+                          className="bg-theme-brand h-3 rounded-full transition-all duration-300 relative overflow-hidden"
+                          style={{ width: `${uploadProgress}%` }}
+                        >
+                          <div className="absolute inset-0 bg-white/20 w-full animate-pulse"></div>
+                        </div>
+                      </div>
+                      <p className="text-sm font-bold text-theme-brand uppercase tracking-widest">
+                        Uploading {uploadProgress}%
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-5 bg-theme-brand text-white font-medium text-xl rounded-full shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all border mt-4"
+              className="w-full py-5 bg-theme-brand text-white font-medium text-xl rounded-full shadow-lg transition-all border mt-4 relative overflow-hidden disabled:opacity-90 disabled:cursor-wait hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100"
             >
-              {loading ? "Uploading..." : "Save Product"}
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                {loading ? (
+                  <>
+                    <Upload className="w-5 h-5 animate-bounce" /> Uploading (
+                    {uploadProgress}%)
+                  </>
+                ) : (
+                  "Save Product"
+                )}
+              </span>
+              {/* Button background progress fill */}
+              {loading && (
+                <div
+                  className="absolute left-0 top-0 bottom-0 bg-white/20 transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              )}
             </button>
           </form>
         </div>
@@ -1076,7 +1169,7 @@ export function Admin() {
                       required
                       name="price"
                       type="number"
-                      step="10"
+                      step="1"
                       defaultValue={editingProduct.price}
                       className="w-full px-5 py-3 rounded-2xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white outline-none font-medium transition-colors"
                     />
