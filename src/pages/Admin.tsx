@@ -55,10 +55,10 @@ interface Product {
   category: string;
   stock: number;
   description: string;
-  imageUrl: string;
+  imageUrl?: string; // Kept for storefront backward compatibility
+  imageUrls: string[];
 }
 
-// Fetch password from .env based on your framework (Vite, Next.js, or CRA)
 const ADMIN_PASSWORD =
   import.meta.env?.VITE_ADMIN_PASSWORD ||
   process.env?.NEXT_PUBLIC_ADMIN_PASSWORD ||
@@ -76,12 +76,12 @@ export function Admin() {
   const [tab, setTab] = useState<"orders" | "inventory" | "add">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>([]); // <-- NEW: Categories state
+  const [categories, setCategories] = useState<string[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // State for adding products (Preview & Progress)
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   // State for editing a product and viewing images
@@ -126,8 +126,6 @@ export function Admin() {
     if (!isAuthenticated) return;
 
     setIsFetching(true);
-
-    // Always fetch categories so they are ready for the Add/Edit tabs
     fetchCategories();
 
     if (tab === "orders") {
@@ -215,12 +213,12 @@ export function Admin() {
 
   // --- INVENTORY MANAGEMENT LOGIC ---
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const previewUrl = URL.createObjectURL(file);
-      setImagePreview(previewUrl);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const urls = Array.from(files).map((file) => URL.createObjectURL(file));
+      setImagePreviews(urls);
     } else {
-      setImagePreview(null);
+      setImagePreviews([]);
     }
   };
 
@@ -232,7 +230,6 @@ export function Admin() {
     const formElement = e.currentTarget;
     const formData = new FormData(formElement);
 
-    // Using XMLHttpRequest instead of fetch to track upload progress natively
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/products", true);
 
@@ -247,9 +244,9 @@ export function Admin() {
       if (xhr.status >= 200 && xhr.status < 300) {
         alert("Product added successfully!");
         formElement.reset();
-        setImagePreview(null);
+        setImagePreviews([]);
         setUploadProgress(0);
-        fetchCategories(); // Refresh categories in case they added a new one
+        fetchCategories();
         setTab("inventory");
       } else {
         alert("Failed to add product.");
@@ -273,28 +270,28 @@ export function Admin() {
 
     setLoading(true);
     const formData = new FormData(e.currentTarget);
-    const updatedData = {
-      title: formData.get("title") as string,
-      price: parseFloat(formData.get("price") as string),
-      category: formData.get("category") as string,
-      stock: parseInt(formData.get("stock") as string, 10),
-      description: formData.get("description") as string,
-    };
+
+    // If no files selected, clear them so backend knows not to parse empty files
+    const files = formData.getAll("images") as File[];
+    if (files.length > 0 && files[0].size === 0) {
+      formData.delete("images");
+    }
 
     try {
+      // Changed to FormData request to support optional image updates on edits
       const res = await fetch(`/api/products/${editingProduct.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedData),
+        body: formData,
       });
 
       if (res.ok) {
+        const updatedProduct = await res.json();
         setProducts(
           products.map((p) =>
-            p.id === editingProduct.id ? { ...p, ...updatedData } : p,
+            p.id === editingProduct.id ? updatedProduct : p,
           ),
         );
-        fetchCategories(); // Refresh categories in case they created a new one
+        fetchCategories();
         setEditingProduct(null);
       } else {
         alert("Failed to update product.");
@@ -314,7 +311,7 @@ export function Admin() {
       const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
       if (res.ok) {
         setProducts(products.filter((p) => p.id !== id));
-        fetchCategories(); // Refresh categories in case deleting this removed a category entirely
+        fetchCategories();
       } else {
         alert("Failed to delete product.");
       }
@@ -324,12 +321,12 @@ export function Admin() {
     }
   };
 
-  // Cleanup object URLs to avoid memory leaks
+  // Cleanup object URLs
   useEffect(() => {
     return () => {
-      if (imagePreview) URL.revokeObjectURL(imagePreview);
+      imagePreviews.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [imagePreview]);
+  }, [imagePreviews]);
 
   // --- RENDER LOGIN ---
   if (!isAuthenticated) {
@@ -649,9 +646,7 @@ export function Admin() {
                                         <User className="w-4 h-4" /> Customer
                                         Details
                                       </h4>
-
                                       <div className="bg-gray-50/50 p-5 rounded-xl border border-gray-100 space-y-4">
-                                        {/* Name & Email Row */}
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                           <div className="flex items-start gap-3">
                                             <User className="w-4 h-4 text-gray-400 mt-0.5" />
@@ -679,7 +674,6 @@ export function Admin() {
 
                                         <hr className="border-gray-100" />
 
-                                        {/* Phone & Address Row */}
                                         <div className="space-y-4">
                                           <div className="flex items-start gap-3">
                                             <Phone className="w-4 h-4 text-gray-400 mt-0.5" />
@@ -720,8 +714,6 @@ export function Admin() {
                                           </div>
                                         </div>
                                       </div>
-
-                                      {/* Order Notes */}
                                       {order.notes && (
                                         <div className="mt-4 p-4 bg-yellow-50/50 text-yellow-800 rounded-xl text-sm border border-yellow-100 flex items-start gap-3">
                                           <span className="font-bold whitespace-nowrap">
@@ -852,7 +844,7 @@ export function Admin() {
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-theme-bg text-theme-muted border-b-[3px] border-gray-100 text-sm uppercase tracking-widest font-medium">
-                  <th className="p-5 font-medium w-20">Image</th>
+                  <th className="p-5 font-medium w-32">Images</th>
                   <th className="p-5 font-medium">Product Details</th>
                   <th className="p-5 font-medium">Category</th>
                   <th className="p-5 font-medium">Price</th>
@@ -886,12 +878,23 @@ export function Admin() {
                       className="border-b border-gray-100 group hover:bg-theme-bg/50 transition-colors"
                     >
                       <td className="p-5">
-                        <img
-                          src={product.imageUrl}
-                          alt={product.title}
-                          onClick={() => setSelectedImage(product.imageUrl)}
-                          className="w-12 h-12 object-cover rounded-xl border border-gray-100 cursor-pointer hover:opacity-80 transition-opacity"
-                        />
+                        <div className="flex -space-x-3 items-center">
+                          {product.imageUrls?.slice(0, 3).map((url, idx) => (
+                            <img
+                              key={idx}
+                              src={url}
+                              alt={product.title}
+                              onClick={() => setSelectedImage(url)}
+                              className="w-12 h-12 object-cover rounded-xl border-2 border-white cursor-pointer hover:z-10 relative transition-transform hover:scale-110 shadow-sm bg-white"
+                            />
+                          ))}
+                          {product.imageUrls &&
+                            product.imageUrls.length > 3 && (
+                              <div className="w-12 h-12 rounded-xl bg-gray-100 border-2 border-white flex items-center justify-center text-xs font-bold text-gray-500 z-10 relative shadow-sm">
+                                +{product.imageUrls.length - 3}
+                              </div>
+                            )}
+                        </div>
                       </td>
                       <td className="p-5">
                         <p className="font-medium text-theme-text">
@@ -979,7 +982,6 @@ export function Admin() {
             </div>
 
             <div className="grid grid-cols-2 gap-6">
-              {/* DYNAMIC CATEGORY FIELD */}
               <div className="col-span-2 sm:col-span-1 relative">
                 <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
                   Category
@@ -1031,44 +1033,51 @@ export function Admin() {
 
             <div>
               <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
-                Product Image
+                Product Images
               </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border border-gray-100 border-dashed rounded-3xl hover:border-theme-brand hover:bg-theme-hover transition-colors cursor-pointer relative bg-theme-bg overflow-hidden group">
+              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border border-gray-100 border-dashed rounded-3xl hover:border-theme-brand hover:bg-theme-hover transition-colors cursor-pointer relative bg-theme-bg overflow-hidden group min-h-[160px]">
                 <input
                   required
                   type="file"
-                  name="image"
+                  name="images"
                   accept="image/*"
+                  multiple
                   onChange={handleImageChange}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 />
 
-                {imagePreview ? (
-                  <div className="relative w-full flex flex-col items-center pointer-events-none">
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="h-48 w-auto object-cover rounded-xl shadow-sm mb-3 border border-gray-200"
-                    />
+                {imagePreviews.length > 0 ? (
+                  <div className="relative w-full flex flex-col items-center pointer-events-none p-4">
+                    <div className="flex flex-wrap gap-3 justify-center mb-4">
+                      {imagePreviews.map((src, idx) => (
+                        <img
+                          key={idx}
+                          src={src}
+                          alt="Preview"
+                          className="h-24 w-24 object-cover rounded-xl shadow-sm border border-gray-200"
+                        />
+                      ))}
+                    </div>
                     <p className="text-sm font-medium text-theme-brand group-hover:underline">
-                      Click or drag to change image
+                      Click or drag to change images ({imagePreviews.length}{" "}
+                      selected)
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4 text-center pointer-events-none">
+                  <div className="space-y-4 text-center pointer-events-none mt-4">
                     <div className="w-16 h-16 bg-white rounded-full border border-gray-100 flex items-center justify-center mx-auto shadow-sm group-hover:scale-110 transition-transform">
                       <ImageIcon className="h-8 w-8 text-theme-brand" />
                     </div>
                     <div className="flex text-lg font-medium text-theme-muted justify-center items-center mt-4">
                       <span className="relative bg-transparent rounded-md font-medium text-theme-brand">
-                        Upload a file
+                        Upload files
                       </span>
                       <p className="pl-1">or drag and drop</p>
                     </div>
                   </div>
                 )}
 
-                {/* File Upload Progress Overlay inside Dropzone */}
+                {/* File Upload Progress Overlay */}
                 <AnimatePresence>
                   {loading && (
                     <motion.div
@@ -1109,7 +1118,6 @@ export function Admin() {
                   "Save Product"
                 )}
               </span>
-              {/* Button background progress fill */}
               {loading && (
                 <div
                   className="absolute left-0 top-0 bottom-0 bg-white/20 transition-all duration-300"
@@ -1189,7 +1197,6 @@ export function Admin() {
                   </div>
                 </div>
 
-                {/* DYNAMIC CATEGORY FIELD FOR EDIT */}
                 <div>
                   <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
                     Category
@@ -1222,11 +1229,29 @@ export function Admin() {
                   ></textarea>
                 </div>
 
+                {/* Multiple Image Replace Input */}
+                <div>
+                  <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
+                    Replace Images (Optional)
+                  </label>
+                  <input
+                    type="file"
+                    name="images"
+                    multiple
+                    accept="image/*"
+                    className="w-full px-5 py-3 rounded-2xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white outline-none font-medium transition-colors"
+                  />
+                  <p className="text-xs text-gray-400 mt-2">
+                    Leave this blank to keep existing images. Uploading files
+                    here will completely replace current images.
+                  </p>
+                </div>
+
                 <div className="pt-2">
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-4 bg-theme-brand text-white font-medium text-lg rounded-full shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all"
+                    className="w-full py-4 bg-theme-brand text-white font-medium text-lg rounded-full shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-75 disabled:cursor-wait"
                   >
                     {loading ? "Saving..." : "Save Changes"}
                   </button>

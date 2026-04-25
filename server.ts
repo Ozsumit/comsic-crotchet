@@ -10,7 +10,6 @@ import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 
 dotenv.config();
-console.log("DEBUG: API_KEY is", process.env.CLOUDINARY_API_KEY); // Check terminal output
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,7 +24,6 @@ const pool = new Pool({
       : false,
 });
 
-// --- Cloudinary Setup ---
 // --- Cloudinary Setup ---
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -59,7 +57,7 @@ async function setupDatabase() {
       title TEXT NOT NULL,
       description TEXT,
       price REAL NOT NULL,
-      "imageUrl" TEXT NOT NULL,
+      "imageUrls" TEXT[] NOT NULL DEFAULT '{}',
       category TEXT NOT NULL,
       stock INTEGER DEFAULT 1
     );
@@ -85,6 +83,38 @@ async function setupDatabase() {
       price REAL NOT NULL
     );
   `);
+
+  // Zero-Downtime Migration: Handled via safe JS to avoid PL/pgSQL syntax issues
+  try {
+    const colCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='products' AND column_name='imageUrl'
+    `);
+
+    if (colCheck.rows.length > 0) {
+      console.log(
+        "Database Migration: Converting 'imageUrl' string to 'imageUrls' array...",
+      );
+
+      // 1. Ensure the new column exists
+      await pool.query(
+        `ALTER TABLE products ADD COLUMN IF NOT EXISTS "imageUrls" TEXT[] DEFAULT '{}'`,
+      );
+
+      // 2. Transfer existing strings into an array gracefully
+      await pool.query(
+        `UPDATE products SET "imageUrls" = ARRAY["imageUrl"] WHERE "imageUrl" IS NOT NULL AND "imageUrl" != ''`,
+      );
+
+      // 3. Drop the old column
+      await pool.query(`ALTER TABLE products DROP COLUMN "imageUrl"`);
+      console.log("Database Migration completed successfully.");
+    }
+  } catch (err) {
+    console.error("Migration notice:", err.message);
+  }
+
   console.log("Database tables verified/created.");
 }
 
@@ -93,11 +123,11 @@ async function seedDatabase() {
   const count = await pool.query("SELECT COUNT(*) as count FROM products");
   if (parseInt(count.rows[0].count) === 0) {
     await pool.query(`
-      INSERT INTO products (title, description, price, "imageUrl", category, stock) VALUES
-      ('Pastel Bunny Plush', 'A soft and cuddly handmade bunny.', 25.00, 'https://picsum.photos/seed/bunny/400', 'plushies', 5),
-      ('Mint Froggy Coaster', 'Keep your desk clean and cute.', 12.00, 'https://picsum.photos/seed/frog/400', 'accessories', 10),
-      ('Chunky Knit Sweater', 'Warm pastel gradient sweater.', 65.00, 'https://picsum.photos/seed/sweater/400', 'apparel', 2),
-      ('Strawberry Cow Amigurumi', 'Moo-velous little friend.', 30.00, 'https://picsum.photos/seed/cow/400', 'plushies', 4)
+      INSERT INTO products (title, description, price, "imageUrls", category, stock) VALUES
+      ('Pastel Bunny Plush', 'A soft and cuddly handmade bunny.', 25.00, ARRAY['https://picsum.photos/seed/bunny/400'], 'plushies', 5),
+      ('Mint Froggy Coaster', 'Keep your desk clean and cute.', 12.00, ARRAY['https://picsum.photos/seed/frog/400'], 'accessories', 10),
+      ('Chunky Knit Sweater', 'Warm pastel gradient sweater.', 65.00, ARRAY['https://picsum.photos/seed/sweater/400'], 'apparel', 2),
+      ('Strawberry Cow Amigurumi', 'Moo-velous little friend.', 30.00, ARRAY['https://picsum.photos/seed/cow/400'], 'plushies', 4)
     `);
     console.log("Seeded database with initial products.");
   }
@@ -105,7 +135,6 @@ async function seedDatabase() {
 
 // --- Main Server ---
 async function startServer() {
-  // Initialize database before starting
   await setupDatabase();
   await seedDatabase();
 
@@ -133,11 +162,11 @@ async function startServer() {
     }
   });
 
-  // GET all products (with search, filter, sort, limit)
+  // GET all products (with backward compatible imageUrl alias)
   app.get("/api/products", async (req, res) => {
     const { category, search, sort, limit } = req.query;
 
-    let query = `SELECT * FROM products WHERE 1=1`;
+    let query = `SELECT id, title, description, price, category, stock, "imageUrls", "imageUrls"[1] AS "imageUrl" FROM products WHERE 1=1`;
     const params = [];
     let i = 1;
 
@@ -157,7 +186,7 @@ async function startServer() {
     } else if (sort === "price-desc") {
       query += " ORDER BY price DESC";
     } else {
-      query += " ORDER BY id DESC"; // Default: newest first
+      query += " ORDER BY id DESC";
     }
 
     if (limit) {
@@ -177,9 +206,10 @@ async function startServer() {
   // GET single product by ID
   app.get("/api/products/:id", async (req, res) => {
     try {
-      const result = await pool.query("SELECT * FROM products WHERE id = $1", [
-        req.params.id,
-      ]);
+      const result = await pool.query(
+        `SELECT *, "imageUrls"[1] AS "imageUrl" FROM products WHERE id = $1`,
+        [req.params.id],
+      );
       if (!result.rows[0]) return res.status(404).json({ error: "Not found" });
       res.json(result.rows[0]);
     } catch (err) {
@@ -188,12 +218,11 @@ async function startServer() {
     }
   });
 
-  // POST create a new product (with Cloudinary image upload)
+  // POST create a new product (handles multiple image uploads)
   app.post(
     "/api/products",
     (req, res, next) => {
-      // 1. Catch the Cloudinary Upload Error specifically
-      upload.single("image")(req, res, (err) => {
+      upload.array("images", 10)(req, res, (err) => {
         if (err) {
           console.error("🚨 CLOUDINARY UPLOAD ERROR:", err);
           return res
@@ -204,27 +233,22 @@ async function startServer() {
       });
     },
     async (req, res) => {
-      console.log("--- DEBUG START ---");
-      console.log("Body:", req.body);
-      console.log("File:", req.file);
-
-      if (!req.file) {
-        console.error("Upload failed: No file received by server");
-        return res.status(400).json({ error: "No image file uploaded" });
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ error: "No image files uploaded" });
       }
 
       try {
         const { title, description, price, category, stock } = req.body;
-        const imageUrl = req.file.path; // Cloudinary URL is stored in req.file.path
+        const imageUrls = req.files.map((file) => file.path); // Array of Cloudinary URLs
 
         const result = await pool.query(
-          `INSERT INTO products (title, description, price, "imageUrl", category, stock)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+          `INSERT INTO products (title, description, price, "imageUrls", category, stock)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *, "imageUrls"[1] AS "imageUrl"`,
           [
             title,
             description,
             parseFloat(price),
-            imageUrl,
+            imageUrls,
             category,
             parseInt(stock) || 1,
           ],
@@ -240,58 +264,68 @@ async function startServer() {
     },
   );
 
-  // PATCH update a product (with optional new image)
-  app.patch("/api/products/:id", upload.single("image"), async (req, res) => {
-    try {
-      const { title, description, price, category, stock } = req.body;
-      const imageUrl = req.file?.path || req.body.imageUrl;
+  // PATCH update a product
+  app.patch(
+    "/api/products/:id",
+    upload.array("images", 10),
+    async (req, res) => {
+      try {
+        const { title, description, price, category, stock } = req.body;
+        let imageUrls = null;
 
-      const fields = [];
-      const params = [];
-      let i = 1;
+        // If new files are supplied, overwrite images
+        if (req.files && req.files.length > 0) {
+          imageUrls = req.files.map((f) => f.path);
+        }
 
-      if (title !== undefined) {
-        fields.push(`title = $${i++}`);
-        params.push(title);
-      }
-      if (description !== undefined) {
-        fields.push(`description = $${i++}`);
-        params.push(description);
-      }
-      if (price !== undefined) {
-        fields.push(`price = $${i++}`);
-        params.push(parseFloat(price));
-      }
-      if (category !== undefined) {
-        fields.push(`category = $${i++}`);
-        params.push(category);
-      }
-      if (stock !== undefined) {
-        fields.push(`stock = $${i++}`);
-        params.push(parseInt(stock));
-      }
-      if (imageUrl) {
-        fields.push(`"imageUrl" = $${i++}`);
-        params.push(imageUrl);
-      }
+        const fields = [];
+        const params = [];
+        let i = 1;
 
-      if (fields.length === 0) {
-        return res.status(400).json({ error: "No fields to update" });
+        if (title !== undefined) {
+          fields.push(`title = $${i++}`);
+          params.push(title);
+        }
+        if (description !== undefined) {
+          fields.push(`description = $${i++}`);
+          params.push(description);
+        }
+        if (price !== undefined) {
+          fields.push(`price = $${i++}`);
+          params.push(parseFloat(price));
+        }
+        if (category !== undefined) {
+          fields.push(`category = $${i++}`);
+          params.push(category);
+        }
+        if (stock !== undefined) {
+          fields.push(`stock = $${i++}`);
+          params.push(parseInt(stock, 10));
+        }
+        if (imageUrls) {
+          fields.push(`"imageUrls" = $${i++}`);
+          params.push(imageUrls);
+        }
+
+        if (fields.length === 0) {
+          return res.status(400).json({ error: "No fields to update" });
+        }
+
+        params.push(req.params.id);
+        const result = await pool.query(
+          `UPDATE products SET ${fields.join(", ")} WHERE id = $${i} RETURNING *, "imageUrls"[1] AS "imageUrl"`,
+          params,
+        );
+
+        if (!result.rows[0])
+          return res.status(404).json({ error: "Not found" });
+        res.json(result.rows[0]);
+      } catch (err) {
+        console.error("Failed to update product:", err);
+        res.status(500).json({ error: "Failed to update product" });
       }
-
-      params.push(req.params.id);
-      const result = await pool.query(
-        `UPDATE products SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`,
-        params,
-      );
-
-      if (!result.rows[0]) return res.status(404).json({ error: "Not found" });
-      res.json(result.rows[0]);
-    } catch (err) {
-      console.error("Failed to update product:", err);
-      res.status(500).json({ error: "Failed to update product" });
-    }
-  });
+    },
+  );
 
   // DELETE a product
   app.delete("/api/products/:id", async (req, res) => {
@@ -315,18 +349,14 @@ async function startServer() {
   app.post("/api/orders", async (req, res) => {
     const { customerName, phone, email, address, items, total, paymentMethod } =
       req.body;
-
     const trackingId =
       "TRK" +
       Date.now() +
       Math.random().toString(36).substring(2, 6).toUpperCase();
-
     const client = await pool.connect();
 
     try {
       await client.query("BEGIN");
-
-      // Insert the order
       const orderResult = await client.query(
         `INSERT INTO orders ("trackingId", "customerName", phone, email, address, "paymentMethod", total)
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
@@ -334,11 +364,9 @@ async function startServer() {
       );
       const orderId = orderResult.rows[0].id;
 
-      // Insert order items and decrement stock
       for (const item of items) {
         await client.query(
-          `INSERT INTO order_items ("orderId", "productId", quantity, price)
-           VALUES ($1, $2, $3, $4)`,
+          `INSERT INTO order_items ("orderId", "productId", quantity, price) VALUES ($1, $2, $3, $4)`,
           [orderId, item.productId, item.quantity, item.price],
         );
         await client.query(
@@ -349,7 +377,7 @@ async function startServer() {
 
       await client.query("COMMIT");
 
-      // Send confirmation email (non-blocking)
+      // Send confirmation email
       const mailOptions = {
         from: `"Cute Crochets Shop" <${process.env.EMAIL_USER}>`,
         to: email,
@@ -359,32 +387,18 @@ async function startServer() {
             <h2 style="color: #ff6b81;">Order Confirmed! 🎉</h2>
             <p>Hi ${customerName},</p>
             <p>Thank you for your purchase! Your cute crochets are getting ready to ship.</p>
-
             <div style="background-color: #fff0f3; padding: 15px; border-radius: 8px; margin: 20px 0;">
               <p style="margin: 0; font-size: 14px; text-transform: uppercase; color: #666;">Tracking ID</p>
               <h3 style="margin: 5px 0 0 0; color: #ff6b81; font-family: monospace;">${trackingId}</h3>
-              <p style="margin: 8px 0 0 0;">
-                <a href="https://crotchet.sumit.info.np/track?id=${trackingId}" 
-                   target="_blank" rel="noopener noreferrer"
-                   style="color: #ff6b81;">Track Your Order →</a>
-              </p>
             </div>
-
             <p><strong>Total:</strong> $${total.toFixed(2)}</p>
-            <p><strong>Shipping Address:</strong><br/>${address}</p>
-
-            <p style="margin-top: 30px; font-size: 12px; color: #999;">
-              Save this email to track your order. If you have questions, just reply!
-            </p>
           </div>
         `,
       };
 
       transporter
         .sendMail(mailOptions)
-        .then(() => console.log(`Confirmation email sent to ${email}`))
-        .catch((err) => console.error("Failed to send email:", err));
-
+        .catch((err) => console.error("Email err:", err));
       res.json({ success: true, orderId, trackingId });
     } catch (err) {
       await client.query("ROLLBACK");
@@ -395,14 +409,14 @@ async function startServer() {
     }
   });
 
-  // GET all orders (with items)
+  // GET all orders
   app.get("/api/orders", async (req, res) => {
     try {
       const orders = await pool.query(
         `SELECT * FROM orders ORDER BY "createdAt" DESC`,
       );
       const items = await pool.query(
-        `SELECT oi.*, p.title, p."imageUrl"
+        `SELECT oi.*, p.title, p."imageUrls"[1] AS "imageUrl"
          FROM order_items oi
          JOIN products p ON oi."productId" = p.id`,
       );
@@ -419,8 +433,7 @@ async function startServer() {
     }
   });
 
-  // GET track single order by trackingId
-  // NOTE: This route must be defined BEFORE /api/orders/:id to avoid conflict
+  // GET track single order
   app.get("/api/orders/track/:trackingId", async (req, res) => {
     try {
       const result = await pool.query(
@@ -432,7 +445,7 @@ async function startServer() {
 
       const order = result.rows[0];
       const items = await pool.query(
-        `SELECT oi.*, p.title, p."imageUrl"
+        `SELECT oi.*, p.title, p."imageUrls"[1] AS "imageUrl"
          FROM order_items oi
          JOIN products p ON oi."productId" = p.id
          WHERE oi."orderId" = $1`,
@@ -446,7 +459,7 @@ async function startServer() {
     }
   });
 
-  // PATCH update order status (Admin)
+  // PATCH update order status
   app.patch("/api/orders/:id/status", async (req, res) => {
     try {
       const { status } = req.body;
@@ -456,7 +469,6 @@ async function startServer() {
       ]);
       res.json({ success: true });
     } catch (err) {
-      console.error("Failed to update order status:", err);
       res.status(500).json({ error: "Failed to update order status" });
     }
   });
@@ -470,7 +482,6 @@ async function startServer() {
       await pool.query("DELETE FROM orders WHERE id = $1", [req.params.id]);
       res.json({ success: true });
     } catch (err) {
-      console.error("Failed to delete order:", err);
       res.status(500).json({ error: "Failed to delete order" });
     }
   });
@@ -488,9 +499,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
   app.listen(PORT, "0.0.0.0", () => {
