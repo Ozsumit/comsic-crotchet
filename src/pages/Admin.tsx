@@ -62,8 +62,7 @@ interface Product {
 const ADMIN_PASSWORD =
   import.meta.env?.VITE_ADMIN_PASSWORD ||
   process.env?.NEXT_PUBLIC_ADMIN_PASSWORD ||
-  process.env?.REACT_APP_ADMIN_PASSWORD ||
-  "Comsic11";
+  process.env?.REACT_APP_ADMIN_PASSWORD;
 
 export function Admin() {
   // --- AUTH STATE ---
