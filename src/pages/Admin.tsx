@@ -77,6 +77,7 @@ export function Admin() {
   const [tab, setTab] = useState<"orders" | "inventory" | "add">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]); // <-- NEW: Categories state
   const [isFetching, setIsFetching] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -111,10 +112,21 @@ export function Admin() {
   };
 
   // --- DATA FETCHING ---
+  const fetchCategories = () => {
+    fetch("/api/categories")
+      .then((res) => res.json())
+      .then((data) => setCategories(data))
+      .catch((err) => console.error("Failed to fetch categories:", err));
+  };
+
   useEffect(() => {
     if (!isAuthenticated) return;
 
     setIsFetching(true);
+
+    // Always fetch categories so they are ready for the Add/Edit tabs
+    fetchCategories();
+
     if (tab === "orders") {
       fetch("/api/orders")
         .then((res) => res.json())
@@ -212,6 +224,7 @@ export function Admin() {
       if (res.ok) {
         alert("Product added successfully!");
         (e.target as HTMLFormElement).reset();
+        fetchCategories(); // Refresh categories in case they added a new one
         setTab("inventory");
       } else {
         alert("Failed to add product.");
@@ -251,6 +264,7 @@ export function Admin() {
             p.id === editingProduct.id ? { ...p, ...updatedData } : p,
           ),
         );
+        fetchCategories(); // Refresh categories in case they created a new one
         setEditingProduct(null);
       } else {
         alert("Failed to update product.");
@@ -270,6 +284,7 @@ export function Admin() {
       const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
       if (res.ok) {
         setProducts(products.filter((p) => p.id !== id));
+        fetchCategories(); // Refresh categories in case deleting this removed a category entirely
       } else {
         alert("Failed to delete product.");
       }
@@ -377,7 +392,7 @@ export function Admin() {
         </button>
       </div>
 
-      {/* --- TAB: ORDERS --- */}
+      {/* --- TAB: ORDERS (Collapsed for brevity, no changes needed here) --- */}
       {tab === "orders" && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[800px] max-h-[85vh]">
           {/* Header & Controls */}
@@ -927,20 +942,29 @@ export function Admin() {
             </div>
 
             <div className="grid grid-cols-2 gap-6">
-              <div className="col-span-2 sm:col-span-1">
+              {/* DYNAMIC CATEGORY FIELD */}
+              <div className="col-span-2 sm:col-span-1 relative">
                 <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
                   Category
                 </label>
-                <select
+                <input
                   required
                   name="category"
+                  list="category-options"
+                  placeholder="Select or type new..."
                   className="w-full px-5 py-4 rounded-full border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white focus:ring-0 outline-none font-medium transition-colors text-theme-text"
-                >
-                  <option value="plushies">Plushies</option>
-                  <option value="apparel">Apparel</option>
-                  <option value="accessories">Accessories</option>
-                </select>
+                />
+                <datalist id="category-options">
+                  {categories.map((cat, idx) => (
+                    <option key={idx} value={cat} />
+                  ))}
+                </datalist>
+                <p className="text-[10px] text-theme-muted mt-2 ml-2 leading-tight">
+                  Double-click input to select an existing category, or type to
+                  create a new one.
+                </p>
               </div>
+
               <div className="col-span-2 sm:col-span-1">
                 <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
                   Stock
@@ -1073,20 +1097,24 @@ export function Admin() {
                   </div>
                 </div>
 
+                {/* DYNAMIC CATEGORY FIELD FOR EDIT */}
                 <div>
                   <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
                     Category
                   </label>
-                  <select
+                  <input
                     required
                     name="category"
+                    list="category-options-edit"
                     defaultValue={editingProduct.category}
+                    placeholder="Select or type new..."
                     className="w-full px-5 py-3 rounded-2xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white outline-none font-medium transition-colors text-theme-text"
-                  >
-                    <option value="plushies">Plushies</option>
-                    <option value="apparel">Apparel</option>
-                    <option value="accessories">Accessories</option>
-                  </select>
+                  />
+                  <datalist id="category-options-edit">
+                    {categories.map((cat, idx) => (
+                      <option key={idx} value={cat} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div>

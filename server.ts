@@ -84,28 +84,70 @@ async function startServer() {
   // --- API Routes ---
 
   // Get all products
+
+  // Get a single product
+
+  // --- API Routes ---
+
+  // 1. NEW: Get all unique categories for the Shop dropdown
+  app.get("/api/categories", (req, res) => {
+    try {
+      const rows = db
+        .prepare(
+          "SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != ''",
+        )
+        .all();
+      const categories = rows.map((row) => row.category);
+      res.json(categories);
+    } catch (err) {
+      console.error("Failed to fetch categories:", err);
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
+  // 2. UPDATED: Get all products (Now supports Search, Category Filters, and Price Sort)
   app.get("/api/products", (req, res) => {
-    const { category, limit } = req.query;
-    let query = "SELECT * FROM products";
+    const { category, search, sort, limit } = req.query;
+
+    // Use WHERE 1=1 so we can easily append AND clauses
+    let query = "SELECT * FROM products WHERE 1=1";
     const params = [];
 
+    // Filter by Category
     if (category && category !== "all") {
-      query += " WHERE category = ?";
+      query += " AND category = ?";
       params.push(category);
     }
 
-    query += " ORDER BY id DESC";
+    // Filter by Search Text (matches title or description)
+    if (search) {
+      query += " AND (title LIKE ? OR description LIKE ?)";
+      params.push(`%${search}%`, `%${search}%`);
+    }
 
+    // Sort by Price or Newest
+    if (sort === "price-asc") {
+      query += " ORDER BY price ASC";
+    } else if (sort === "price-desc") {
+      query += " ORDER BY price DESC";
+    } else {
+      query += " ORDER BY id DESC"; // Default: Newest first
+    }
+
+    // Limit results if needed
     if (limit) {
       query += " LIMIT ?";
       params.push(parseInt(limit, 10));
     }
 
-    const products = db.prepare(query).all(...params);
-    res.json(products);
+    try {
+      const products = db.prepare(query).all(...params);
+      res.json(products);
+    } catch (err) {
+      console.error("Failed to fetch products:", err);
+      res.status(500).json({ error: "Failed to fetch products" });
+    }
   });
-
-  // Get a single product
   app.get("/api/products/:id", (req, res) => {
     const product = db
       .prepare("SELECT * FROM products WHERE id = ?")
@@ -113,48 +155,6 @@ async function startServer() {
     if (!product) return res.status(404).json({ error: "Not found" });
     res.json(product);
   });
-
-  // Create a product (admin)
-  app.post("/api/products", upload.single("image"), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "Image is required" });
-
-    const { title, description, price, category, stock } = req.body;
-    const imageUrl = `/uploads/${req.file.filename}`;
-
-    const stmt = db.prepare(`
-      INSERT INTO products (title, description, price, imageUrl, category, stock)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    const info = stmt.run(
-      title,
-      description,
-      parseFloat(price),
-      imageUrl,
-      category,
-      parseInt(stock || "1", 10),
-    );
-
-    res.json({ id: info.lastInsertRowid, ...req.body, imageUrl });
-  });
-
-  // Update Product details and stock
-  app.patch("/api/products/:id", (req, res) => {
-    const { title, price, category, stock, description } = req.body;
-    try {
-      db.prepare(
-        `
-        UPDATE products 
-        SET title = ?, price = ?, category = ?, stock = ?, description = ?
-        WHERE id = ?
-      `,
-      ).run(title, price, category, stock, description, req.params.id);
-      res.json({ success: true });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Failed to update product" });
-    }
-  });
-
   // Delete a Product
   app.delete("/api/products/:id", (req, res) => {
     try {

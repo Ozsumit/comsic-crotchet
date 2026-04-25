@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ShoppingCart, Check } from "lucide-react";
+import { ShoppingCart, Check, Plus, Minus } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, useCartStore } from "../store";
 
@@ -11,17 +11,16 @@ export function ProductCard({
   product: Product;
   index: number;
 }) {
-  // Fetch both the add function AND the cart items from your store
   const addItem = useCartStore((state) => state.addItem);
+  // Pulling decreaseItem instead of removeItem
+  const decreaseItem = useCartStore((state) => state.decreaseItem);
   const cartItems = useCartStore((state) => state.items || state.cart || []);
 
   const [isJustAdded, setIsJustAdded] = useState(false);
 
-  // Check how many of this specific product are currently in the cart
-  const cartItem = cartItems.find((item: any) => item.id === product.id);
+  const cartItem = cartItems.find((item) => item.id === product.id);
   const inCartQuantity = cartItem ? cartItem.quantity : 0;
 
-  // Revert the green checkmark animation after 1.5s
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     if (isJustAdded) {
@@ -30,10 +29,26 @@ export function ProductCard({
     return () => clearTimeout(timeout);
   }, [isJustAdded]);
 
-  const handleAddToCart = (e: React.MouseEvent) => {
-    e.preventDefault(); // Prevents triggering the Link if accidentally overlapping
+  const handleInitialAdd = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     addItem(product);
     setIsJustAdded(true);
+  };
+
+  const handleIncreaseQuantity = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addItem(product);
+  };
+
+  // NEW: Explicitly named handleDecreaseQuantity
+  const handleDecreaseQuantity = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (decreaseItem) {
+      decreaseItem(product.id);
+    }
   };
 
   const bgColors = [
@@ -44,9 +59,9 @@ export function ProductCard({
   ];
   const bgClass = bgColors[index % bgColors.length];
 
-  // Disable if standard stock is 0, OR if they already have the max stock in their cart
   const isOutOfStock = product.stock <= 0;
   const isMaxStockReached = inCartQuantity >= product.stock;
+  const isLowStock = product.stock > 0 && product.stock <= 5;
 
   return (
     <motion.div
@@ -55,88 +70,144 @@ export function ProductCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.4 }}
-      className="bg-white p-4 rounded-3xl border border-gray-100 flex flex-col hover:-translate-y-1 transition-all duration-300 group shadow-sm hover:shadow-xl"
+      className={`bg-white p-4 rounded-3xl border border-gray-100 flex flex-col transition-all duration-300 group shadow-sm relative ${
+        isOutOfStock ? "opacity-75" : "hover:-translate-y-1 hover:shadow-xl"
+      }`}
     >
+      {/* ... (Image section remains exactly the same) ... */}
       <Link
         to={`/product/${product.id}`}
-        className={`w-full aspect-square ${bgClass} rounded-2xl mb-5 overflow-hidden relative block transition-all duration-500`}
+        className={`w-full aspect-square ${bgClass} rounded-2xl mb-4 overflow-hidden relative block transition-all duration-500`}
       >
         <motion.img
-          whileHover={{ scale: 1.05 }}
+          whileHover={!isOutOfStock ? { scale: 1.05 } : {}}
           transition={{ duration: 0.6, ease: "easeOut" }}
           src={product.imageUrl}
           alt={product.title}
-          className="absolute inset-0 w-full h-full object-cover mix-blend-multiply opacity-90 transition-opacity group-hover:opacity-100"
+          className={`absolute inset-0 w-full h-full object-cover mix-blend-multiply transition-all duration-500 ${
+            isOutOfStock
+              ? "grayscale opacity-40"
+              : "opacity-90 group-hover:opacity-100"
+          }`}
         />
+
         {isOutOfStock && (
-          <div className="absolute inset-0 bg-white/90 flex items-center justify-center backdrop-blur-[2px]">
-            <span className="bg-white/70 px-4 py-2 text-xs font-semibold text-red-500 uppercase tracking-widest shadow-sm rounded-full">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/30 backdrop-blur-[2px] z-10 pointer-events-none">
+            <span className="bg-red-600 text-white px-5 py-2.5 text-xs font-black uppercase tracking-[0.2em] shadow-lg rounded-full scale-110">
               Sold Out
+            </span>
+          </div>
+        )}
+
+        {!isOutOfStock && isLowStock && (
+          <div className="absolute top-3 left-3 z-10 pointer-events-none">
+            <span className="bg-orange-100/90 text-orange-700 border border-orange-200 px-3 py-1 text-[10px] font-bold uppercase tracking-wider shadow-sm rounded-full backdrop-blur-md">
+              Only {product.stock} left
             </span>
           </div>
         )}
       </Link>
 
-      <div className="px-2 flex flex-col flex-grow">
-        <Link to={`/product/${product.id}`}>
-          <h3 className="font-semibold text-lg text-theme-text group-hover:text-theme-brand transition-colors line-clamp-1">
+      {/* DETAILS SECTION */}
+      <div className="px-2 flex flex-col flex-grow relative z-10">
+        <Link to={`/product/${product.id}`} className="block">
+          <p className="text-sm text-theme-muted font-serif mb-1 uppercase tracking-wide text-xs">
+            {product.category}
+          </p>
+          <h3
+            className={`font-bold text-lg transition-colors line-clamp-2 leading-tight ${
+              isOutOfStock
+                ? "text-gray-400"
+                : "text-theme-text group-hover:text-theme-brand"
+            }`}
+          >
             {product.title}
           </h3>
         </Link>
-        <p className="text-xl text-theme-muted mb-4 font-serif mt-1">
-          {product.category}
-        </p>
 
-        <div className="mt-auto flex justify-between items-center pt-2">
-          <span className="font-semibold text-theme-brand text-xl">
-            Rs. {product.price.toFixed(2)}
-          </span>
+        {/* BOTTOM ROW: Price & Actions */}
+        <div className="mt-auto flex justify-between items-end pt-4 min-h-[48px]">
+          <div className="flex flex-col relative">
+            <span
+              className={`font-semibold text-xl ${isOutOfStock ? "text-gray-400" : "text-theme-text"}`}
+            >
+              Rs. {product.price.toFixed(2)}
+            </span>
+            {isMaxStockReached && !isOutOfStock && (
+              <span className="text-[10px] text-red-500 font-medium absolute -bottom-4 whitespace-nowrap">
+                Max limit reached
+              </span>
+            )}
+          </div>
 
-          <button
-            onClick={handleAddToCart}
-            disabled={isOutOfStock || isMaxStockReached}
-            title={isMaxStockReached ? "Max stock reached" : "Add to cart"}
-            className={`w-10 h-10 flex items-center justify-center font-medium transition-all disabled:opacity-50 disabled:hover:scale-100 rounded-full shadow-sm relative overflow-hidden ${
-              isJustAdded
-                ? "bg-green-500 text-white hover:bg-green-600 scale-110" // Just clicked (Green Check)
-                : inCartQuantity > 0
-                  ? "bg-theme-brand text-white hover:bg-theme-brand/90" // Already in cart (Solid color)
-                  : "bg-theme-light-pink text-theme-brand hover:bg-theme-brand hover:text-white hover:scale-105 active:scale-95" // Not in cart (Light pink)
-            }`}
-            aria-label="Add to cart"
-          >
-            <AnimatePresence mode="wait">
-              {isJustAdded ? (
+          {/* ACTION BUTTONS */}
+          <div className="h-10 relative flex items-center justify-end">
+            <AnimatePresence mode="popLayout">
+              {inCartQuantity > 0 && !isJustAdded ? (
+                // STEPPER CONTROLS
                 <motion.div
-                  key="check"
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  key="stepper"
+                  initial={{ opacity: 0, scale: 0.8, width: 40 }}
+                  animate={{ opacity: 1, scale: 1, width: 100 }}
+                  exit={{ opacity: 0, scale: 0.8, width: 40 }}
+                  className="flex items-center justify-between bg-theme-brand text-white rounded-full h-10 px-1 shadow-md"
                 >
-                  <Check className="w-5 h-5" />
+                  <button
+                    onClick={handleDecreaseQuantity} // <-- ATTACHED HERE
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors active:scale-95"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <span className="font-semibold text-sm w-4 text-center">
+                    {inCartQuantity}
+                  </span>
+                  <button
+                    onClick={handleIncreaseQuantity}
+                    disabled={isMaxStockReached}
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors disabled:opacity-30 disabled:hover:bg-transparent active:scale-95 cursor-pointer disabled:cursor-not-allowed"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </motion.div>
               ) : (
-                <motion.div
-                  key="cart"
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="relative flex items-center justify-center w-full h-full"
+                // INITIAL ADD BUTTON
+                <motion.button
+                  key="add-btn"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={handleInitialAdd}
+                  disabled={isOutOfStock}
+                  className={`w-10 h-10 flex items-center justify-center font-medium transition-all rounded-full relative overflow-hidden ${
+                    isOutOfStock
+                      ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                      : isJustAdded
+                        ? "bg-green-500 text-white scale-110 shadow-md"
+                        : "bg-theme-light-pink text-theme-brand hover:bg-theme-brand hover:text-white hover:scale-105 active:scale-95 shadow-sm"
+                  }`}
+                  aria-label="Add to cart"
                 >
-                  <ShoppingCart className="w-4 h-4" />
-
-                  {/* Quantity Badge if item is already in cart */}
-                  {inCartQuantity > 0 && !isJustAdded && (
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white border-[1.5px] border-white">
-                      {inCartQuantity}
-                    </span>
+                  {isJustAdded ? (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 20,
+                      }}
+                    >
+                      <Check className="w-5 h-5" />
+                    </motion.div>
+                  ) : (
+                    <ShoppingCart className="w-[18px] h-[18px]" />
                   )}
-                </motion.div>
+                </motion.button>
               )}
             </AnimatePresence>
-          </button>
+          </div>
         </div>
       </div>
     </motion.div>

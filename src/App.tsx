@@ -42,8 +42,18 @@ export default function App() {
 
         <footer className="px-6 sm:px-10 py-4 bg-theme-border/30 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center text-[11px] font-normal text-theme-muted uppercase tracking-widest mt-auto">
           <div className="flex gap-6 mb-4 sm:mb-0">
-            <span>Secure Checkout</span>
-            <span>Cloud Hosting Active</span>
+            <span>Pastel Stitches</span>
+            <span>
+              Developed in partnership with{" "}
+              <a
+                href="https://sumit.info.np"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-theme-brand hover:underline"
+              >
+                Comsic
+              </a>
+            </span>
           </div>
           <div className="flex gap-6 items-center">
             <span className="flex items-center gap-1">
