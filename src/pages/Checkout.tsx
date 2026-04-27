@@ -13,6 +13,9 @@ import {
   Minus,
   X,
   AlertCircle,
+  MapPin,
+  Loader2,
+  Package,
 } from "lucide-react";
 import { useCartStore } from "../store";
 import { motion, AnimatePresence } from "framer-motion";
@@ -43,7 +46,6 @@ export function Checkout() {
   const [success, setSuccess] = useState(false);
 
   // --- PERSISTENCE LOGIC ---
-  // Initialize state from localStorage or defaults
   const [formData, setFormData] = useState(() => {
     const saved = localStorage.getItem("checkout_draft");
     return saved
@@ -61,7 +63,6 @@ export function Checkout() {
         };
   });
 
-  // Save to localStorage whenever formData changes
   useEffect(() => {
     localStorage.setItem("checkout_draft", JSON.stringify(formData));
   }, [formData]);
@@ -148,7 +149,7 @@ export function Checkout() {
   const finishOrder = () => {
     setSuccess(true);
     setShowConfirmModal(false);
-    localStorage.removeItem("checkout_draft"); // Clear persistence on success
+    localStorage.removeItem("checkout_draft");
     clearCart();
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -165,8 +166,6 @@ export function Checkout() {
   const handleDecrease = (id: string, currentQty: number) => {
     if (currentQty > 1) {
       updateQuantity?.(id, currentQty - 1);
-    } else {
-      removeItem?.(id);
     }
   };
 
@@ -475,54 +474,170 @@ export function Checkout() {
         </div>
       </motion.div>
 
-      {/* Confirmation Modal remains the same, but uses formData for text display */}
+      {/* Improved Confirmation Modal with Item Details */}
       <AnimatePresence>
         {showConfirmModal && orderPayload && (
-          <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <motion.div className="bg-white rounded-[30px] p-8 max-w-md w-full shadow-2xl relative">
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                className="absolute top-5 right-5 text-gray-400 hover:text-gray-600"
-              >
-                <X />
-              </button>
-              <h3
-                style={cursiveStyle}
-                className="text-4xl font-bold text-center mb-6"
-              >
-                Confirm Order
-              </h3>
-              <div className="bg-gray-50 rounded-2xl p-5 mb-6 space-y-3 text-sm">
-                <div className="flex justify-between border-b pb-2">
-                  <span>Deliver To:</span>
-                  <span className="font-bold">{orderPayload.customerName}</span>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <span>Payment:</span>
-                  <span className="font-bold text-theme-brand uppercase">
-                    {orderPayload.paymentMethod}
-                  </span>
-                </div>
-                <div className="flex justify-between pt-1">
-                  <span>Total:</span>
-                  <span className="font-bold text-lg">
-                    Rs. {orderPayload.total.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-              <div className="flex gap-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="bg-white rounded-[30px] max-w-lg w-full shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden"
+            >
+              {/* Header */}
+              <div className="p-6 md:p-8 pb-4 shrink-0 relative text-center">
                 <button
                   onClick={() => setShowConfirmModal(false)}
-                  className="flex-1 py-4 rounded-full font-bold bg-gray-100"
+                  className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 hover:text-gray-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <div className="w-16 h-16 bg-theme-light-pink rounded-full flex items-center justify-center mx-auto mb-4 text-theme-brand">
+                  <ShoppingBag className="w-8 h-8" />
+                </div>
+                <h3
+                  style={cursiveStyle}
+                  className="text-4xl font-bold text-gray-900"
+                >
+                  Review Order
+                </h3>
+                <p className="text-gray-500 text-sm mt-1">
+                  Please confirm your details below
+                </p>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="px-6 md:px-8 overflow-y-auto pb-4 custom-scrollbar">
+                <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mb-6 space-y-5 text-sm font-sans">
+                  {/* Shipping Details */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-gray-500 font-bold text-xs uppercase tracking-wider mb-2">
+                      <MapPin className="w-4 h-4" /> Shipping Address
+                    </div>
+                    <p className="font-bold text-gray-900 text-base">
+                      {orderPayload.customerName}
+                    </p>
+                    <p className="text-gray-600">{orderPayload.phone}</p>
+                    <p className="text-gray-600 leading-relaxed pr-4">
+                      {orderPayload.address}
+                    </p>
+                  </div>
+
+                  <div className="w-full h-px bg-gray-200" />
+
+                  {/* Items List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-gray-500 font-bold text-xs uppercase tracking-wider">
+                      <Package className="w-4 h-4" /> Items (
+                      {orderPayload.items.reduce(
+                        (acc, item) => acc + item.quantity,
+                        0,
+                      )}
+                      )
+                    </div>
+                    <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                      {items.map((cartItem) => (
+                        <div
+                          key={cartItem.id}
+                          className="flex items-center gap-3 bg-white p-2 rounded-xl border border-gray-100 shadow-sm"
+                        >
+                          <img
+                            src={cartItem.imageUrls?.[0] || cartItem.imageUrl}
+                            alt={cartItem.title}
+                            className="w-12 h-12 object-cover rounded-lg border border-gray-50 shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-bold text-gray-900 truncate text-sm">
+                              {cartItem.title}
+                            </h4>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Qty: {cartItem.quantity}
+                            </p>
+                          </div>
+                          <div className="font-bold text-theme-brand text-sm shrink-0 pl-2">
+                            Rs.{" "}
+                            {(cartItem.price * cartItem.quantity).toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="w-full h-px bg-gray-200" />
+
+                  {/* Payment Info */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-gray-500 font-bold text-xs uppercase tracking-wider">
+                      <CreditCard className="w-4 h-4" /> Payment
+                    </div>
+                    <div className="font-bold text-gray-900 flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-lg border border-gray-100 shadow-sm">
+                      {orderPayload.paymentMethod === "cod" ? (
+                        <>
+                          <Truck className="w-4 h-4 text-theme-brand" /> Cash on
+                          Delivery
+                        </>
+                      ) : (
+                        <>
+                          <QrCode className="w-4 h-4 text-theme-brand" /> QR
+                          Transfer
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="w-full h-px bg-gray-200" />
+
+                  {/* Total Info */}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="text-gray-500 font-bold text-xs uppercase tracking-wider">
+                      Total
+                    </div>
+                    <div className="font-bold text-theme-brand text-2xl">
+                      Rs. {orderPayload.total.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Informative alert for QR Payment */}
+                {orderPayload.paymentMethod === "qr" && (
+                  <div className="mb-2 p-4 bg-blue-50 border border-blue-100 text-blue-800 rounded-2xl flex items-start gap-3 text-sm">
+                    <AlertCircle className="w-5 h-5 shrink-0 text-blue-500" />
+                    <p className="leading-relaxed">
+                      Make sure you have completed the QR payment. We'll verify
+                      your transaction before dispatching.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer Actions */}
+              <div className="p-6 md:p-8 pt-4 shrink-0 bg-white border-t border-gray-50 flex gap-3">
+                <button
+                  onClick={() => setShowConfirmModal(false)}
+                  disabled={loading}
+                  className="flex-1 py-4 rounded-full font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
                   Back
                 </button>
                 <button
                   onClick={executeOrder}
                   disabled={loading}
-                  className="flex-1 py-4 rounded-full font-bold bg-theme-brand text-white shadow-lg"
+                  className="flex-[2] py-4 rounded-full font-bold bg-theme-brand text-white shadow-lg shadow-pink-200 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:hover:translate-y-0"
                 >
-                  {loading ? "Processing..." : "Place Order"}
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" /> Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5" /> Confirm & Place Order
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>

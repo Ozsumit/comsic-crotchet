@@ -127,7 +127,7 @@ export function ProductDetail() {
         <div className="space-y-6">
           {/* MAIN IMAGE */}
           <div
-            className="relative aspect-square h-[35rem] rounded-3xl overflow-hidden bg-white shadow-xl border"
+            className="relative aspect-square h-[25rem] md:h-[35rem] rounded-3xl overflow-hidden bg-white shadow-xl border"
             onMouseEnter={() => setShowZoom(true)}
             onMouseLeave={() => setShowZoom(false)}
             onMouseMove={handleMouseMove}
