@@ -111,3 +111,63 @@ export const useCartStore = create<CartState>()(
     },
   ),
 );
+
+interface WishlistState {
+  items: Product[];
+  toggleItem: (product: Product) => void;
+  removeItem: (productId: number) => void;
+  isInWishlist: (productId: number) => boolean;
+}
+
+export const useWishlistStore = create<WishlistState>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      toggleItem: (product) => {
+        const exists = get().items.find((item) => item.id === product.id);
+        if (exists) {
+          set({ items: get().items.filter((item) => item.id !== product.id) });
+        } else {
+          set({ items: [...get().items, product] });
+        }
+      },
+      removeItem: (productId) =>
+        set({ items: get().items.filter((item) => item.id !== productId) }),
+      isInWishlist: (productId) => get().items.some((item) => item.id === productId),
+    }),
+    {
+      name: "wishlist-storage",
+    },
+  ),
+);
+
+export interface Toast {
+  id: string;
+  message: string;
+  type: "success" | "error" | "info";
+}
+
+interface ToastState {
+  toasts: Toast[];
+  addToast: (message: string, type?: Toast["type"]) => void;
+  removeToast: (id: string) => void;
+}
+
+export const useToastStore = create<ToastState>()((set) => ({
+  toasts: [],
+  addToast: (message, type = "success") => {
+    const id = Math.random().toString(36).substring(2, 9);
+    set((state) => ({
+      toasts: [...state.toasts, { id, message, type }],
+    }));
+    setTimeout(() => {
+      set((state) => ({
+        toasts: state.toasts.filter((t) => t.id !== id),
+      }));
+    }, 3000);
+  },
+  removeToast: (id) =>
+    set((state) => ({
+      toasts: state.toasts.filter((t) => t.id !== id),
+    })),
+}));

@@ -12,6 +12,9 @@ import { Checkout } from "./pages/Checkout";
 import { Admin } from "./pages/Admin";
 import { Track } from "./pages/Track";
 import { ProductDetail } from "./pages/ProductDetail";
+import { Wishlist } from "./pages/Wishlist";
+import { Footer } from "./components/Footer";
+import { ToastContainer } from "./components/ToastContainer";
 import { AnimatePresence } from "motion/react";
 
 function AnimatedRoutes() {
@@ -22,6 +25,7 @@ function AnimatedRoutes() {
         <Route path="/" element={<Home />} />
         <Route path="/shop" element={<Shop />} />
         <Route path="/product/:id" element={<ProductDetail />} />
+        <Route path="/wishlist" element={<Wishlist />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/admin" element={<Admin />} />
@@ -36,33 +40,11 @@ export default function App() {
     <BrowserRouter>
       <div className="min-h-screen flex flex-col overflow-x-hidden font-sans bg-theme-bg text-theme-text">
         <Navbar />
+        <ToastContainer />
         <main className="flex-grow flex flex-col p-4 sm:p-8">
           <AnimatedRoutes />
         </main>
-
-        <footer className="px-6 sm:px-10 py-4 bg-theme-border/30 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center text-[11px] font-normal text-theme-muted uppercase tracking-widest mt-auto">
-          <div className="flex gap-6 mb-4 sm:mb-0">
-            <span>Pastel Stitches</span>
-            <span>
-              Developed in partnership with{" "}
-              <a
-                href="https://sumit.info.np"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-theme-brand hover:underline"
-              >
-                Comsic
-              </a>
-            </span>
-          </div>
-          <div className="flex gap-6 items-center">
-            <span className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-              Order System Online
-            </span>
-            <span>&copy; {new Date().getFullYear()} Pastel Stitches</span>
-          </div>
-        </footer>
+        <Footer />
       </div>
     </BrowserRouter>
   );
