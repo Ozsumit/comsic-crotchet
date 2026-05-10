@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ShoppingCart, Check, Plus, Minus } from "lucide-react";
+import { ShoppingCart, Check, Plus, Minus, Heart } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Product, useCartStore } from "../store";
+import { Product, useCartStore, useWishlistStore, useToastStore } from "../store";
 
 export function ProductCard({
   product,
@@ -12,14 +12,16 @@ export function ProductCard({
   index: number;
 }) {
   const addItem = useCartStore((state) => state.addItem);
-  // Pulling decreaseItem instead of removeItem
   const decreaseItem = useCartStore((state) => state.decreaseItem);
-  const cartItems = useCartStore((state) => state.items || state.cart || []);
+  const cartItems = useCartStore((state) => state.items || []);
+  const { toggleItem, isInWishlist } = useWishlistStore();
+  const addToast = useToastStore((state) => state.addToast);
 
   const [isJustAdded, setIsJustAdded] = useState(false);
 
   const cartItem = cartItems.find((item) => item.id === product.id);
   const inCartQuantity = cartItem ? cartItem.quantity : 0;
+  const isFavorite = isInWishlist(product.id);
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
@@ -34,6 +36,7 @@ export function ProductCard({
     e.stopPropagation();
     addItem(product);
     setIsJustAdded(true);
+    addToast(`${product.title} added to cart!`);
   };
 
   const handleIncreaseQuantity = (e: React.MouseEvent) => {
@@ -42,12 +45,20 @@ export function ProductCard({
     addItem(product);
   };
 
-  // NEW: Explicitly named handleDecreaseQuantity
   const handleDecreaseQuantity = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (decreaseItem) {
       decreaseItem(product.id);
+    }
+  };
+
+  const handleToggleWishlist = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleItem(product);
+    if (!isFavorite) {
+      addToast(`${product.title} saved to wishlist!`);
     }
   };
 
@@ -74,7 +85,6 @@ export function ProductCard({
         isOutOfStock ? "opacity-75" : "hover:-translate-y-1 hover:shadow-xl"
       }`}
     >
-      {/* ... (Image section remains exactly the same) ... */}
       <Link
         to={`/product/${product.id}`}
         className={`w-full aspect-square ${bgClass} rounded-2xl mb-4 overflow-hidden relative block transition-all duration-500`}
@@ -90,6 +100,16 @@ export function ProductCard({
               : "opacity-90 group-hover:opacity-100"
           }`}
         />
+
+        {/* Wishlist Button */}
+        <button
+          onClick={handleToggleWishlist}
+          className={`absolute top-3 right-3 z-20 w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md transition-all ${
+            isFavorite ? "bg-theme-brand text-white" : "bg-white/70 text-theme-muted hover:text-theme-brand"
+          }`}
+        >
+          <Heart className={`w-5 h-5 ${isFavorite ? "fill-current" : ""}`} />
+        </button>
 
         {isOutOfStock && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/30 backdrop-blur-[2px] z-10 pointer-events-none">
@@ -108,7 +128,6 @@ export function ProductCard({
         )}
       </Link>
 
-      {/* DETAILS SECTION */}
       <div className="px-2 flex flex-col flex-grow relative z-10">
         <Link to={`/product/${product.id}`} className="block">
           <p className="text-sm text-theme-muted font-serif mb-1 uppercase tracking-wide text-xs">
@@ -125,7 +144,6 @@ export function ProductCard({
           </h3>
         </Link>
 
-        {/* BOTTOM ROW: Price & Actions */}
         <div className="mt-auto flex justify-between items-end pt-4 min-h-[48px]">
           <div className="flex flex-col relative">
             <span
@@ -140,11 +158,9 @@ export function ProductCard({
             )}
           </div>
 
-          {/* ACTION BUTTONS */}
           <div className="h-10 relative flex items-center justify-end">
             <AnimatePresence mode="popLayout">
               {inCartQuantity > 0 && !isJustAdded ? (
-                // STEPPER CONTROLS
                 <motion.div
                   key="stepper"
                   initial={{ opacity: 0, scale: 0.8, width: 40 }}
@@ -153,7 +169,7 @@ export function ProductCard({
                   className="flex items-center justify-between bg-theme-brand text-white rounded-full h-10 px-1 shadow-md"
                 >
                   <button
-                    onClick={handleDecreaseQuantity} // <-- ATTACHED HERE
+                    onClick={handleDecreaseQuantity}
                     className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors active:scale-95"
                     aria-label="Decrease quantity"
                   >
@@ -172,7 +188,6 @@ export function ProductCard({
                   </button>
                 </motion.div>
               ) : (
-                // INITIAL ADD BUTTON
                 <motion.button
                   key="add-btn"
                   initial={{ opacity: 0, scale: 0.8 }}

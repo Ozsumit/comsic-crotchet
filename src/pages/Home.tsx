@@ -27,10 +27,42 @@ export function Home() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.3 }}
-      className="flex-1 flex flex-col gap-6 max-w-7xl mx-auto w-full"
+      className="flex-1 flex flex-col gap-6 max-w-7xl mx-auto w-full relative"
     >
       {/* Playful Hero Section */}
       <div className="bg-theme-hero-bg p-8 md:p-12 lg:p-16 flex flex-col md:flex-row items-center justify-between relative overflow-hidden rounded-[40px] shadow-sm transform hover:scale-[1.01] transition-transform duration-500 mt-4 border border-theme-hero-accent/10">
+
+        {/* Animated Background Blobs */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <motion.div
+            animate={{
+              x: [0, 100, 0],
+              y: [0, 50, 0],
+              scale: [1, 1.2, 1],
+            }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-pink-100/30 rounded-full blur-[80px]"
+          />
+          <motion.div
+            animate={{
+              x: [0, -80, 0],
+              y: [0, 120, 0],
+              scale: [1, 1.1, 1],
+            }}
+            transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+            className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-100/30 rounded-full blur-[80px]"
+          />
+          <motion.div
+            animate={{
+              x: [0, 50, 0],
+              y: [0, -100, 0],
+              scale: [1, 1.3, 1],
+            }}
+            transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
+            className="absolute top-[20%] right-[10%] w-[30%] h-[30%] bg-purple-100/20 rounded-full blur-[60px]"
+          />
+        </div>
+
         <div className="z-10 w-full max-w-[500px] text-center md:text-left mb-8 md:mb-0">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -86,9 +118,9 @@ export function Home() {
           (feature, idx) => (
             <div
               key={idx}
-              className="bg-theme-bg p-6 rounded-3xl border border-theme-border/50 flex flex-col items-center text-center hover:-translate-y-1 transition-transform"
+              className="bg-white p-6 rounded-3xl border border-theme-border/50 flex flex-col items-center text-center hover:-translate-y-1 transition-transform shadow-sm"
             >
-              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm text-theme-brand">
+              <div className="w-12 h-12 bg-theme-bg rounded-full flex items-center justify-center mb-4 shadow-sm text-theme-brand">
                 {idx === 0 && <Sparkles className="w-6 h-6" />}
                 {idx === 1 && <Heart className="w-6 h-6" />}
                 {idx === 2 && <Zap className="w-6 h-6" />}
