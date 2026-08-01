@@ -43,6 +43,9 @@ export function Navbar() {
           <Link to="/shop" className="hover:text-theme-brand transition-colors">
             Shop All
           </Link>
+          <Link to="/sellers" className="hover:text-theme-brand transition-colors">
+            Seller Portal
+          </Link>
           <Link
             to="/track"
             className="hover:text-theme-brand transition-colors px-3 py-1 bg-gray-50 border border-gray-100 rounded-full"
@@ -124,6 +127,13 @@ export function Navbar() {
                   className="hover:text-theme-brand transition-colors"
                 >
                   Shop All
+                </Link>
+                <Link
+                  to="/sellers"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="hover:text-theme-brand transition-colors"
+                >
+                  Seller Portal
                 </Link>
                 <Link
                   to="/track"

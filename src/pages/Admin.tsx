@@ -60,7 +60,7 @@ interface Product {
 }
 
 const ADMIN_PASSWORD =
-  import.meta.env?.VITE_ADMIN_PASSWORD ||
+  (import.meta as any).env?.VITE_ADMIN_PASSWORD ||
   process.env?.NEXT_PUBLIC_ADMIN_PASSWORD ||
   process.env?.REACT_APP_ADMIN_PASSWORD;
 
