@@ -13,6 +13,7 @@ import { Admin } from "./pages/Admin";
 import { Track } from "./pages/Track";
 import { ProductDetail } from "./pages/ProductDetail";
 import { Wishlist } from "./pages/Wishlist";
+import { Sellers } from "./pages/Sellers";
 import { Footer } from "./components/Footer";
 import { ToastContainer } from "./components/ToastContainer";
 import { AnimatePresence } from "motion/react";
@@ -30,6 +31,7 @@ function AnimatedRoutes() {
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/track" element={<Track />} />
+        <Route path="/sellers" element={<Sellers />} />
       </Routes>
     </AnimatePresence>
   );

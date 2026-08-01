@@ -42,6 +42,7 @@ export function Footer() {
           <h4 className="font-serif text-xl text-theme-text mb-6">Support</h4>
           <ul className="flex flex-col gap-4 text-sm text-theme-muted">
             <li><Link to="/track" className="hover:text-theme-brand transition-colors">Track Order</Link></li>
+            <li><Link to="/sellers" className="hover:text-theme-brand transition-colors font-semibold text-theme-brand">Seller Portal</Link></li>
             <li><a href="#" className="hover:text-theme-brand transition-colors">Shipping Policy</a></li>
             <li><a href="#" className="hover:text-theme-brand transition-colors">Returns & Exchanges</a></li>
             <li><a href="#" className="hover:text-theme-brand transition-colors">FAQ</a></li>

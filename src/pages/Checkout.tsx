@@ -22,7 +22,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 // --- TYPES ---
 interface OrderItem {
-  productId: string;
+  productId: number;
   quantity: number;
   price: number;
 }
@@ -155,7 +155,7 @@ export function Checkout() {
   };
 
   const handleIncrease = (
-    id: string,
+    id: number,
     currentQty: number,
     maxStock?: number,
   ) => {
@@ -163,7 +163,7 @@ export function Checkout() {
     updateQuantity?.(id, currentQty + 1);
   };
 
-  const handleDecrease = (id: string, currentQty: number) => {
+  const handleDecrease = (id: number, currentQty: number) => {
     if (currentQty > 1) {
       updateQuantity?.(id, currentQty - 1);
     }
