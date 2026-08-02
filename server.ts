@@ -287,12 +287,19 @@ async function startServer() {
     upload.array("images", 10),
     async (req, res) => {
       try {
-        const { title, description, price, category, stock, sellerId } = req.body;
+        const { title, description, price, category, stock, sellerId, imageUrls: reqImageUrls } = req.body;
         let imageUrls = null;
 
         const filesArray = req.files as Express.Multer.File[];
-        if (filesArray && filesArray.length > 0)
+        if (filesArray && filesArray.length > 0) {
           imageUrls = filesArray.map((f) => f.path);
+        } else if (reqImageUrls) {
+          try {
+            imageUrls = Array.isArray(reqImageUrls) ? reqImageUrls : JSON.parse(reqImageUrls);
+          } catch (e) {
+            imageUrls = reqImageUrls;
+          }
+        }
 
         const fields = [];
         const params = [];
@@ -802,6 +809,97 @@ async function startServer() {
     } catch (err) {
       console.error("Seller login failed:", err);
       res.status(500).json({ error: "Seller login failed" });
+    }
+  });
+
+  app.get("/api/sellers", async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT s.id, s."sellerId", s.name, s.email, s."createdAt",
+               CAST((SELECT COUNT(*) FROM products p WHERE p."sellerId" = s."sellerId") AS INTEGER) AS "productCount",
+               COALESCE((
+                 SELECT CAST(SUM(oi.quantity * oi.price) AS REAL)
+                 FROM order_items oi
+                 JOIN products p ON oi."productId" = p.id
+                 WHERE p."sellerId" = s."sellerId"
+               ), 0.0) AS "totalSales"
+        FROM sellers s
+        ORDER BY s.id DESC
+      `);
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Failed to fetch sellers:", err);
+      res.status(500).json({ error: "Failed to fetch sellers" });
+    }
+  });
+
+  app.patch("/api/sellers/:id", async (req, res) => {
+    const { name, email } = req.body;
+    try {
+      const result = await pool.query(
+        `UPDATE sellers SET name = $1, email = $2 WHERE id = $3 RETURNING id, "sellerId", name, email`,
+        [name, email, req.params.id]
+      );
+      if (result.rows.length === 0) return res.status(404).json({ error: "Seller not found" });
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("Failed to update seller:", err);
+      res.status(500).json({ error: "Failed to update seller" });
+    }
+  });
+
+  app.delete("/api/sellers/:id", async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const sellerRes = await client.query('SELECT "sellerId" FROM sellers WHERE id = $1', [req.params.id]);
+      if (sellerRes.rows.length === 0) {
+        return res.status(404).json({ error: "Seller not found" });
+      }
+      const sellerId = sellerRes.rows[0].sellerId;
+
+      await client.query('UPDATE products SET "sellerId" = NULL WHERE "sellerId" = $1', [sellerId]);
+      await client.query('DELETE FROM sellers WHERE id = $1', [req.params.id]);
+
+      await client.query("COMMIT");
+      res.json({ success: true });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error("Failed to delete seller:", err);
+      res.status(500).json({ error: "Failed to delete seller" });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.get("/api/customers", async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT DISTINCT ON (o.email)
+          o.email,
+          o."customerName" AS name,
+          o.phone,
+          o.address,
+          CAST(stats.order_count AS INTEGER) AS "orderCount",
+          CAST(stats.total_spent AS REAL) AS "totalSpent",
+          stats.last_order_date AS "lastOrderDate"
+        FROM orders o
+        JOIN (
+          SELECT
+            email,
+            COUNT(id) AS order_count,
+            SUM(total) AS total_spent,
+            MAX("createdAt") AS last_order_date
+          FROM orders
+          GROUP BY email
+        ) stats ON o.email = stats.email
+        ORDER BY o.email, o."createdAt" DESC
+      `);
+      res.json(result.rows);
+    } catch (err) {
+      console.error("Failed to fetch customers:", err);
+      res.status(500).json({ error: "Failed to fetch customers" });
     }
   });
 

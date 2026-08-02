@@ -57,6 +57,7 @@ interface Product {
   description: string;
   imageUrl?: string; // Kept for storefront backward compatibility
   imageUrls: string[];
+  sellerId?: string | null;
 }
 
 const ADMIN_PASSWORD =
@@ -73,12 +74,25 @@ export function Admin() {
   const [authError, setAuthError] = useState(false);
 
   // --- DATA STATES ---
-  const [tab, setTab] = useState<"orders" | "inventory" | "add">("orders");
+  const [tab, setTab] = useState<"orders" | "inventory" | "add" | "sellers" | "customers">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [sellers, setSellers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [editingSeller, setEditingSeller] = useState<any | null>(null);
   const [isFetching, setIsFetching] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Search & Filters for Inventory/Products
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState("all");
+  const [inventorySellerFilter, setInventorySellerFilter] = useState("all");
+
+  // Search, Filter & Expanded for Customers
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerSort, setCustomerSort] = useState<"spend-desc" | "spend-asc" | "orders-desc" | "name-asc">("spend-desc");
+  const [expandedCustomers, setExpandedCustomers] = useState<string[]>([]);
 
   // State for adding products (Preview & Progress)
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -87,6 +101,15 @@ export function Admin() {
   // State for editing a product and viewing images
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [tempImageUrls, setTempImageUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (editingProduct) {
+      setTempImageUrls(editingProduct.imageUrls || []);
+    } else {
+      setTempImageUrls([]);
+    }
+  }, [editingProduct]);
 
   // --- ORDER MANAGEMENT STATES ---
   const [orderSearch, setOrderSearch] = useState("");
@@ -122,11 +145,26 @@ export function Admin() {
       .catch((err) => console.error("Failed to fetch categories:", err));
   };
 
+  const loadAllData = () => {
+    // Fetch all products
+    fetch("/api/products")
+      .then((res) => res.json())
+      .then((data) => setProducts(data))
+      .catch((err) => console.error("Failed to fetch products:", err));
+
+    // Fetch all sellers
+    fetch("/api/sellers")
+      .then((res) => res.json())
+      .then((data) => setSellers(data))
+      .catch((err) => console.error("Failed to fetch sellers:", err));
+  };
+
   useEffect(() => {
     if (!isAuthenticated) return;
 
     setIsFetching(true);
     fetchCategories();
+    loadAllData();
 
     if (tab === "orders") {
       fetch("/api/orders")
@@ -139,6 +177,23 @@ export function Admin() {
         .then((res) => res.json())
         .then((data) => setProducts(data))
         .catch((err) => console.error("Failed to fetch products:", err))
+        .finally(() => setIsFetching(false));
+    } else if (tab === "sellers") {
+      fetch("/api/sellers")
+        .then((res) => res.json())
+        .then((data) => setSellers(data))
+        .catch((err) => console.error("Failed to fetch sellers:", err))
+        .finally(() => setIsFetching(false));
+    } else if (tab === "customers") {
+      fetch("/api/orders")
+        .then((res) => res.json())
+        .then((data) => setOrders(data))
+        .catch((err) => console.error("Failed to fetch orders:", err));
+
+      fetch("/api/customers")
+        .then((res) => res.json())
+        .then((data) => setCustomers(data))
+        .catch((err) => console.error("Failed to fetch customers:", err))
         .finally(() => setIsFetching(false));
     } else {
       setIsFetching(false);
@@ -190,6 +245,69 @@ export function Admin() {
       prev.includes(id)
         ? prev.filter((orderId) => orderId !== id)
         : [...prev, id],
+    );
+  };
+
+  const processedProducts = useMemo(() => {
+    let result = [...products];
+
+    if (inventorySearch.trim()) {
+      const q = inventorySearch.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q) ||
+          p.id.toString().includes(q)
+      );
+    }
+
+    if (inventoryCategoryFilter !== "all") {
+      result = result.filter((p) => p.category === inventoryCategoryFilter);
+    }
+
+    if (inventorySellerFilter !== "all") {
+      if (inventorySellerFilter === "store") {
+        result = result.filter((p) => !p.sellerId);
+      } else {
+        result = result.filter((p) => p.sellerId === inventorySellerFilter);
+      }
+    }
+
+    return result;
+  }, [products, inventorySearch, inventoryCategoryFilter, inventorySellerFilter]);
+
+  const processedCustomers = useMemo(() => {
+    let result = [...customers];
+
+    if (customerSearch.trim()) {
+      const q = customerSearch.toLowerCase();
+      result = result.filter(
+        (c) =>
+          c.name?.toLowerCase().includes(q) ||
+          c.email?.toLowerCase().includes(q) ||
+          c.phone?.includes(q)
+      );
+    }
+
+    result.sort((a, b) => {
+      if (customerSort === "spend-desc") {
+        return (b.totalSpent || 0) - (a.totalSpent || 0);
+      } else if (customerSort === "spend-asc") {
+        return (a.totalSpent || 0) - (b.totalSpent || 0);
+      } else if (customerSort === "orders-desc") {
+        return (b.orderCount || 0) - (a.orderCount || 0);
+      } else if (customerSort === "name-asc") {
+        return (a.name || "").localeCompare(b.name || "");
+      }
+      return 0;
+    });
+
+    return result;
+  }, [customers, customerSearch, customerSort]);
+
+  const toggleCustomerExpand = (email: string) => {
+    setExpandedCustomers((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
     );
   };
 
@@ -330,6 +448,7 @@ export function Admin() {
 
     setLoading(true);
     const formData = new FormData(e.currentTarget);
+    formData.append("imageUrls", JSON.stringify(tempImageUrls));
 
     // If no files selected, clear them so backend knows not to parse empty files
     const files = formData.getAll("images") as File[];
@@ -474,6 +593,26 @@ export function Admin() {
             }`}
           >
             Add Product
+          </button>
+          <button
+            onClick={() => setTab("sellers")}
+            className={`px-8 py-3 font-medium border transition-all whitespace-nowrap ${
+              tab === "sellers"
+                ? "bg-theme-brand text-white border-theme-brand rounded-full"
+                : "bg-white text-theme-muted border-gray-100 hover:bg-theme-hover hover:text-theme-brand rounded-2xl"
+            }`}
+          >
+            Sellers
+          </button>
+          <button
+            onClick={() => setTab("customers")}
+            className={`px-8 py-3 font-medium border transition-all whitespace-nowrap ${
+              tab === "customers"
+                ? "bg-theme-brand text-white border-theme-brand rounded-full"
+                : "bg-white text-theme-muted border-gray-100 hover:bg-theme-hover hover:text-theme-brand rounded-2xl"
+            }`}
+          >
+            Customers
           </button>
         </div>
 
@@ -915,10 +1054,54 @@ export function Admin() {
       {/* --- TAB: INVENTORY --- */}
       {tab === "inventory" && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b-[3px] border-gray-100 flex items-center justify-between bg-white">
-            <h2 className="text-2xl font-medium text-theme-text flex items-center gap-3">
+          <div className="p-6 border-b-[3px] border-gray-100 bg-white">
+            <h2 className="text-2xl font-medium text-theme-text flex items-center gap-3 mb-4">
               <Box className="w-6 h-6 text-theme-brand" /> Inventory Management
             </h2>
+
+            <div className="flex flex-col lg:flex-row gap-4 justify-between items-center bg-gray-50/50 p-3 rounded-2xl border border-gray-100">
+              <div className="relative w-full lg:w-96">
+                <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search products by title or description..."
+                  value={inventorySearch}
+                  onChange={(e) => setInventorySearch(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-theme-brand outline-none text-sm font-medium transition-colors"
+                />
+              </div>
+
+              <div className="flex gap-3 w-full lg:w-auto overflow-x-auto">
+                <div className="relative min-w-[140px]">
+                  <Filter className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    value={inventoryCategoryFilter}
+                    onChange={(e) => setInventoryCategoryFilter(e.target.value)}
+                    className="w-full pl-9 pr-8 py-3 rounded-xl border border-gray-200 bg-white focus:border-theme-brand outline-none text-sm font-medium appearance-none cursor-pointer text-theme-text"
+                  >
+                    <option value="all">All Categories</option>
+                    {categories.map((cat, idx) => (
+                      <option key={idx} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="relative min-w-[140px]">
+                  <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    value={inventorySellerFilter}
+                    onChange={(e) => setInventorySellerFilter(e.target.value)}
+                    className="w-full pl-9 pr-8 py-3 rounded-xl border border-gray-200 bg-white focus:border-theme-brand outline-none text-sm font-medium appearance-none cursor-pointer text-theme-text"
+                  >
+                    <option value="all">All Sellers</option>
+                    <option value="store">Store Listing</option>
+                    {sellers.map((s) => (
+                      <option key={s.id} value={s.sellerId}>{s.name} ({s.sellerId})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="p-0 overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[800px]">
@@ -942,17 +1125,17 @@ export function Admin() {
                       Loading inventory...
                     </td>
                   </tr>
-                ) : products.length === 0 ? (
+                ) : processedProducts.length === 0 ? (
                   <tr>
                     <td
                       colSpan={6}
                       className="p-16 text-center text-theme-muted font-normal"
                     >
-                      No products found.
+                      No products found matching your criteria.
                     </td>
                   </tr>
                 ) : (
-                  products.map((product) => (
+                  processedProducts.map((product) => (
                     <tr
                       key={product.id}
                       className="border-b border-gray-100 group hover:bg-theme-bg/50 transition-colors"
@@ -982,6 +1165,9 @@ export function Admin() {
                         </p>
                         <p className="text-xs text-theme-muted line-clamp-1 max-w-xs">
                           {product.description}
+                        </p>
+                        <p className="text-xs text-theme-brand font-bold tracking-wide mt-1">
+                          Owner: {product.sellerId ? `${product.sellerId}` : "Store"}
                         </p>
                       </td>
                       <td className="p-5 text-theme-muted uppercase tracking-widest text-xs font-medium">
@@ -1101,6 +1287,23 @@ export function Admin() {
 
             <div>
               <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
+                Assign Seller (Owner)
+              </label>
+              <select
+                name="sellerId"
+                className="w-full px-5 py-4 rounded-full border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white focus:ring-0 outline-none font-medium transition-colors text-theme-text cursor-pointer"
+              >
+                <option value="">Store Listing (No Seller)</option>
+                {sellers.map((s) => (
+                  <option key={s.id} value={s.sellerId}>
+                    {s.name} ({s.sellerId})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
                 Description
               </label>
               <textarea
@@ -1209,6 +1412,258 @@ export function Admin() {
         </div>
       )}
 
+      {/* --- TAB: SELLERS --- */}
+      {tab === "sellers" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b-[3px] border-gray-100 bg-white">
+            <h2 className="text-2xl font-medium text-theme-text flex items-center gap-3">
+              <User className="w-6 h-6 text-theme-brand" /> Seller Management
+            </h2>
+          </div>
+          <div className="p-0 overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[800px]">
+              <thead>
+                <tr className="bg-theme-bg text-theme-muted border-b-[3px] border-gray-100 text-sm uppercase tracking-widest font-medium">
+                  <th className="p-5 font-medium">Seller ID</th>
+                  <th className="p-5 font-medium">Name</th>
+                  <th className="p-5 font-medium">Email</th>
+                  <th className="p-5 font-medium">Enrolled Date</th>
+                  <th className="p-5 font-medium text-center">Products Listed</th>
+                  <th className="p-5 font-medium text-right">Total Sales</th>
+                  <th className="p-5 font-medium text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isFetching ? (
+                  <tr>
+                    <td colSpan={7} className="p-16 text-center text-theme-muted font-normal bg-white">
+                      Loading sellers...
+                    </td>
+                  </tr>
+                ) : sellers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-16 text-center text-theme-muted font-normal bg-white">
+                      No sellers registered yet.
+                    </td>
+                  </tr>
+                ) : (
+                  sellers.map((s) => (
+                    <tr key={s.id} className="border-b border-gray-100 hover:bg-theme-bg/50 transition-colors">
+                      <td className="p-5 font-mono text-sm text-theme-brand font-bold">
+                        {s.sellerId}
+                      </td>
+                      <td className="p-5 font-medium text-theme-text">{s.name}</td>
+                      <td className="p-5 text-theme-muted text-sm">{s.email}</td>
+                      <td className="p-5 text-theme-muted text-xs">
+                        {new Date(s.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="p-5 text-center font-bold text-gray-700">
+                        {s.productCount}
+                      </td>
+                      <td className="p-5 text-right font-bold text-theme-brand text-base">
+                        Rs. {(s.totalSales || 0).toFixed(2)}
+                      </td>
+                      <td className="p-5 text-center flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setEditingSeller(s)}
+                          className="p-2 text-theme-brand hover:bg-pink-50 rounded-lg transition-colors"
+                          title="Edit Seller Details"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`Are you sure you want to delete seller ${s.name}? Their products will remain in the store as store-owned.`)) {
+                              return;
+                            }
+                            try {
+                              const res = await fetch(`/api/sellers/${s.id}`, { method: "DELETE" });
+                              if (res.ok) {
+                                alert("Seller deleted successfully!");
+                                loadAllData();
+                              } else {
+                                alert("Failed to delete seller");
+                              }
+                            } catch (err) {
+                              console.error(err);
+                              alert("An error occurred while deleting.");
+                            }
+                          }}
+                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete Seller"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB: CUSTOMERS --- */}
+      {tab === "customers" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b-[3px] border-gray-100 bg-white">
+            <h2 className="text-2xl font-medium text-theme-text flex items-center gap-3 mb-4">
+              <User className="w-6 h-6 text-theme-brand" /> Customer Management
+            </h2>
+
+            <div className="flex flex-col lg:flex-row gap-4 justify-between items-center bg-gray-50/50 p-3 rounded-2xl border border-gray-100">
+              <div className="relative w-full lg:w-96">
+                <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search customers by name, email or phone..."
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-theme-brand outline-none text-sm font-medium transition-colors"
+                />
+              </div>
+
+              <div className="flex gap-3 w-full lg:w-auto overflow-x-auto">
+                <div className="relative min-w-[180px]">
+                  <ListOrdered className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    value={customerSort}
+                    onChange={(e) => setCustomerSort(e.target.value as any)}
+                    className="w-full pl-9 pr-8 py-3 rounded-xl border border-gray-200 bg-white focus:border-theme-brand outline-none text-sm font-medium appearance-none cursor-pointer text-theme-text"
+                  >
+                    <option value="spend-desc">Total Spend (High to Low)</option>
+                    <option value="spend-asc">Total Spend (Low to High)</option>
+                    <option value="orders-desc">Order Count (High to Low)</option>
+                    <option value="name-asc">Name (A to Z)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-0 overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[900px]">
+              <thead>
+                <tr className="bg-theme-bg text-theme-muted border-b-[3px] border-gray-100 text-sm uppercase tracking-widest font-medium">
+                  <th className="p-5 font-medium w-12"></th>
+                  <th className="p-5 font-medium">Customer Details</th>
+                  <th className="p-5 font-medium">Contact Details</th>
+                  <th className="p-5 font-medium">Last Active Date</th>
+                  <th className="p-5 font-medium text-center">Total Orders</th>
+                  <th className="p-5 font-medium text-right">Total Spent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isFetching ? (
+                  <tr>
+                    <td colSpan={6} className="p-16 text-center text-theme-muted font-normal bg-white">
+                      Loading customers...
+                    </td>
+                  </tr>
+                ) : processedCustomers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-16 text-center text-theme-muted font-normal bg-white">
+                      No customers found.
+                    </td>
+                  </tr>
+                ) : (
+                  processedCustomers.map((customer) => {
+                    const isExpanded = expandedCustomers.includes(customer.email);
+                    const customerOrders = orders.filter((o) => o.email === customer.email);
+
+                    return (
+                      <React.Fragment key={customer.email}>
+                        <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors bg-white">
+                          <td className="p-5 text-center">
+                            <button
+                              onClick={() => toggleCustomerExpand(customer.email)}
+                              className="p-1.5 text-gray-400 hover:text-theme-brand hover:bg-pink-50 rounded-lg transition-colors"
+                            >
+                              {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                            </button>
+                          </td>
+                          <td className="p-5 font-medium text-theme-text text-base">
+                            {customer.name}
+                          </td>
+                          <td className="p-5 text-sm text-theme-muted space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <Mail className="w-3.5 h-3.5 text-gray-400" /> {customer.email}
+                            </div>
+                            {customer.phone && (
+                              <div className="flex items-center gap-1.5">
+                                <Phone className="w-3.5 h-3.5 text-gray-400" /> {customer.phone}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-5 text-theme-muted text-sm font-medium">
+                            {customer.lastOrderDate ? new Date(customer.lastOrderDate).toLocaleDateString() : "N/A"}
+                          </td>
+                          <td className="p-5 text-center font-bold text-gray-700">
+                            {customer.orderCount}
+                          </td>
+                          <td className="p-5 text-right font-bold text-theme-brand text-lg">
+                            Rs. {(customer.totalSpent || 0).toFixed(2)}
+                          </td>
+                        </tr>
+
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <tr className="bg-gray-50/60 border-b-[3px] border-gray-100">
+                              <td colSpan={6} className="p-0">
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: "auto", opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="p-6 mx-12 my-4 bg-white rounded-2xl border border-gray-200 shadow-sm space-y-4">
+                                    <h4 className="text-xs font-bold text-theme-muted uppercase tracking-widest flex items-center gap-2">
+                                      <ListOrdered className="w-4 h-4" /> Order History for {customer.name}
+                                    </h4>
+
+                                    {customerOrders.length > 0 ? (
+                                      <div className="space-y-3">
+                                        {customerOrders.map((order) => (
+                                          <div key={order.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            <div>
+                                              <span className="font-bold text-theme-text">Order #{order.id}</span>
+                                              <span className="text-xs text-theme-brand font-medium tracking-wide ml-3">
+                                                {order.trackingId || "No tracking"}
+                                              </span>
+                                              <p className="text-xs text-theme-muted mt-1">
+                                                Date: {new Date(order.createdAt).toLocaleDateString()} | Status: <span className="font-bold uppercase tracking-wider text-[10px]">{order.status}</span>
+                                              </p>
+                                              <p className="text-xs text-theme-muted mt-1 leading-relaxed">
+                                                <strong>Shipping Address:</strong> {order.address}
+                                              </p>
+                                            </div>
+                                            <div className="text-right whitespace-nowrap">
+                                              <p className="text-xs text-theme-muted font-bold mb-0.5">{order.items?.length || 0} items</p>
+                                              <p className="font-bold text-theme-text text-base">Rs. {(order.total || 0).toFixed(2)}</p>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-theme-muted italic">No order items recorded.</p>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              </td>
+                            </tr>
+                          )}
+                        </AnimatePresence>
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* --- EDIT PRODUCT MODAL --- */}
       <AnimatePresence>
         {editingProduct && (
@@ -1298,6 +1753,24 @@ export function Admin() {
 
                 <div>
                   <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
+                    Assign Seller (Owner)
+                  </label>
+                  <select
+                    name="sellerId"
+                    defaultValue={editingProduct.sellerId || ""}
+                    className="w-full px-5 py-3 rounded-2xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white outline-none font-medium transition-colors text-theme-text cursor-pointer"
+                  >
+                    <option value="">Store Listing (No Seller)</option>
+                    {sellers.map((s) => (
+                      <option key={s.id} value={s.sellerId}>
+                        {s.name} ({s.sellerId})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
                     Description
                   </label>
                   <textarea
@@ -1308,6 +1781,43 @@ export function Admin() {
                     className="w-full px-5 py-3 rounded-2xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white outline-none font-medium transition-colors resize-none"
                   ></textarea>
                 </div>
+
+                {tempImageUrls.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
+                      Choose Hero Image (First is Hero)
+                    </label>
+                    <div className="flex flex-wrap gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                      {tempImageUrls.map((url, idx) => (
+                        <div key={idx} className="relative flex flex-col items-center">
+                          <img
+                            src={url}
+                            alt="Product Thumbnail"
+                            className={`w-20 h-20 object-cover rounded-xl border-2 ${
+                              idx === 0 ? "border-theme-brand shadow-md" : "border-transparent"
+                            }`}
+                          />
+                          {idx === 0 ? (
+                            <span className="text-[10px] font-bold text-theme-brand bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100 mt-1">
+                              ✨ Hero
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const reordered = [tempImageUrls[idx], ...tempImageUrls.filter((_, i) => i !== idx)];
+                                setTempImageUrls(reordered);
+                              }}
+                              className="text-[10px] font-bold text-gray-500 hover:text-theme-brand bg-white px-2 py-0.5 rounded-full border border-gray-100 mt-1 cursor-pointer transition-colors hover:border-pink-200"
+                            >
+                              Set Hero
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Multiple Image Replace Input */}
                 <div>
@@ -1334,6 +1844,99 @@ export function Admin() {
                     className="w-full py-4 bg-theme-brand text-white font-medium text-lg rounded-full shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-75 disabled:cursor-wait"
                   >
                     {loading ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- EDIT SELLER MODAL --- */}
+      <AnimatePresence>
+        {editingSeller && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl p-8 max-w-md w-full shadow-xl relative"
+            >
+              <button
+                onClick={() => setEditingSeller(null)}
+                className="absolute top-6 right-6 p-2 bg-gray-50 text-gray-500 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <h3 className="text-2xl font-medium text-theme-text mb-6 flex items-center gap-2">
+                <Edit className="w-6 h-6 text-theme-brand" /> Edit Seller Details
+              </h3>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  const name = formData.get("name");
+                  const email = formData.get("email");
+
+                  try {
+                    const res = await fetch(`/api/sellers/${editingSeller.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ name, email }),
+                    });
+
+                    if (res.ok) {
+                      alert("Seller updated successfully!");
+                      setEditingSeller(null);
+                      loadAllData();
+                    } else {
+                      alert("Failed to update seller");
+                    }
+                  } catch (err) {
+                    console.error(err);
+                    alert("An error occurred while updating.");
+                  }
+                }}
+                className="space-y-5"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
+                    Name
+                  </label>
+                  <input
+                    required
+                    name="name"
+                    defaultValue={editingSeller.name}
+                    className="w-full px-5 py-3 rounded-2xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white outline-none font-medium transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-theme-muted mb-2 uppercase tracking-widest text-xs">
+                    Email
+                  </label>
+                  <input
+                    required
+                    type="email"
+                    name="email"
+                    defaultValue={editingSeller.email}
+                    className="w-full px-5 py-3 rounded-2xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white outline-none font-medium transition-colors"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="w-full py-4 bg-theme-brand text-white font-medium text-lg rounded-full shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  >
+                    Save Seller Changes
                   </button>
                 </div>
               </form>
