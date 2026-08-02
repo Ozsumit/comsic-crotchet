@@ -9,6 +9,8 @@ import {
   X,
   Box,
   Search,
+  Filter,
+  ListOrdered,
   ChevronDown,
   ChevronUp,
   ChevronLeft,
@@ -96,12 +98,68 @@ export function Sellers() {
   // Edit Product and selected image
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [tempImageUrls, setTempImageUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (editingProduct) {
+      setTempImageUrls(editingProduct.imageUrls || []);
+    } else {
+      setTempImageUrls([]);
+    }
+  }, [editingProduct]);
 
   // Order Management States
   const [orderSearch, setOrderSearch] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
+  const [orderSort, setOrderSort] = useState<"newest" | "oldest">("newest");
   const [orderPage, setOrderPage] = useState(1);
   const [expandedOrders, setExpandedOrders] = useState<number[]>([]);
   const ORDERS_PER_PAGE = 5;
+
+  const handleUpdateStock = async (
+    items: OrderItem[],
+    action: "reimburse" | "deduct",
+  ) => {
+    try {
+      const res = await fetch("/api/products");
+      if (!res.ok) return;
+      const currentProducts: Product[] = await res.json();
+
+      let stockUpdated = false;
+
+      for (const item of items) {
+        const product = currentProducts.find((p) => p.title === item.title);
+        if (product) {
+          const newStock =
+            action === "reimburse"
+              ? product.stock + item.quantity
+              : Math.max(0, product.stock - item.quantity);
+
+          const formData = new FormData();
+          formData.append("title", product.title);
+          formData.append("price", product.price.toString());
+          formData.append("category", product.category);
+          formData.append("description", product.description);
+          formData.append("stock", newStock.toString());
+
+          const patchRes = await fetch(`/api/products/${product.id}`, {
+            method: "PATCH",
+            body: formData,
+          });
+
+          if (patchRes.ok) {
+            stockUpdated = true;
+          }
+        }
+      }
+
+      if (stockUpdated) {
+        fetchDashboardData();
+      }
+    } catch (err) {
+      console.error("Failed to update stocks:", err);
+    }
+  };
 
   const cursiveStyle = { fontFamily: "'Caveat', 'Dancing Script', cursive" };
 
@@ -233,8 +291,18 @@ export function Sellers() {
       );
     }
 
+    if (orderStatusFilter !== "all") {
+      result = result.filter((o) => o.status === orderStatusFilter);
+    }
+
+    result.sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      return orderSort === "newest" ? dateB - dateA : dateA - dateB;
+    });
+
     return result;
-  }, [orders, orderSearch]);
+  }, [orders, orderSearch, orderStatusFilter, orderSort]);
 
   const totalOrderPages = Math.ceil(processedOrders.length / ORDERS_PER_PAGE) || 1;
   const paginatedOrders = processedOrders.slice(
@@ -244,7 +312,7 @@ export function Sellers() {
 
   useEffect(() => {
     setOrderPage(1);
-  }, [orderSearch]);
+  }, [orderSearch, orderStatusFilter, orderSort]);
 
   const toggleOrderExpand = (id: number) => {
     setExpandedOrders((prev) =>
@@ -315,6 +383,7 @@ export function Sellers() {
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     formData.append("sellerId", seller.sellerId);
+    formData.append("imageUrls", JSON.stringify(tempImageUrls));
 
     // If no files selected, clear them
     const files = formData.getAll("images") as File[];
@@ -631,10 +700,55 @@ export function Sellers() {
       {tab === "sales" && (
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col min-h-[400px]">
           <div className="p-6 border-b border-gray-100 bg-white">
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-3">
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-3 mb-4">
               <TrendingUp className="w-5 h-5 text-theme-brand" /> My Sales Management
             </h2>
-            <p className="text-sm text-gray-400 mt-1 font-medium">Orders containing your listed products are shown below.</p>
+            <p className="text-sm text-gray-400 mt-1 mb-4 font-medium">Orders containing your listed products are shown below.</p>
+
+            <div className="flex flex-col lg:flex-row gap-4 justify-between items-center bg-gray-50/50 p-3 rounded-2xl border border-gray-100">
+              <div className="relative w-full lg:w-96">
+                <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search tracking, ID, phone, or customer..."
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-theme-brand outline-none text-sm font-medium transition-colors"
+                />
+              </div>
+
+              <div className="flex gap-3 w-full lg:w-auto overflow-x-auto">
+                <div className="relative min-w-[140px]">
+                  <Filter className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    value={orderStatusFilter}
+                    onChange={(e) => setOrderStatusFilter(e.target.value)}
+                    className="w-full pl-9 pr-8 py-3 rounded-xl border border-gray-200 bg-white focus:border-theme-brand outline-none text-sm font-medium appearance-none cursor-pointer text-gray-700"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="processing">Processing</option>
+                    <option value="shipped">Shipped</option>
+                    <option value="delivered">Delivered</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                <div className="relative min-w-[140px]">
+                  <ListOrdered className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    value={orderSort}
+                    onChange={(e) =>
+                      setOrderSort(e.target.value as "newest" | "oldest")
+                    }
+                    className="w-full pl-9 pr-8 py-3 rounded-xl border border-gray-200 bg-white focus:border-theme-brand outline-none text-sm font-medium appearance-none cursor-pointer text-gray-700"
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -692,14 +806,76 @@ export function Sellers() {
                           <td className="p-5 text-gray-500 font-bold text-xs">
                             {new Date(order.createdAt).toLocaleDateString()}
                           </td>
-                          <td className="p-5">
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                              order.status === "delivered" ? "bg-green-50 text-green-600 border border-green-100" :
-                              order.status === "cancelled" ? "bg-red-50 text-red-500 border border-red-100" :
-                              "bg-pink-50 text-theme-brand border border-pink-100"
-                            }`}>
-                              {order.status}
-                            </span>
+                          <td className="p-5 relative z-10 w-48">
+                            <select
+                              value={order.status}
+                              onChange={async (e) => {
+                                const newStatus = e.target.value;
+                                const oldStatus = order.status;
+                                try {
+                                  const res = await fetch(
+                                    `/api/orders/${order.id}/status`,
+                                    {
+                                      method: "PATCH",
+                                      headers: {
+                                        "Content-Type": "application/json",
+                                      },
+                                      body: JSON.stringify({
+                                        status: newStatus,
+                                      }),
+                                    },
+                                  );
+                                  if (res.ok) {
+                                    setOrders(
+                                      orders.map((o) =>
+                                        o.id === order.id
+                                          ? { ...o, status: newStatus }
+                                          : o,
+                                      ),
+                                    );
+
+                                    // Handle automatic stock inventory updates
+                                    if (
+                                      oldStatus !== "cancelled" &&
+                                      newStatus === "cancelled"
+                                    ) {
+                                      await handleUpdateStock(
+                                        order.items,
+                                        "reimburse",
+                                      );
+                                    } else if (
+                                      oldStatus === "cancelled" &&
+                                      newStatus !== "cancelled"
+                                    ) {
+                                      await handleUpdateStock(
+                                        order.items,
+                                        "deduct",
+                                      );
+                                    }
+                                  } else {
+                                    alert("Failed to update status");
+                                  }
+                                } catch (err) {
+                                  console.error("Failed to update status", err);
+                                  alert(
+                                    "An error occurred while updating status",
+                                  );
+                                }
+                              }}
+                              className={`w-full px-3 py-2 font-bold uppercase tracking-widest rounded-xl border outline-none text-[10px] cursor-pointer appearance-none transition-colors ${
+                                order.status === "cancelled"
+                                  ? "bg-red-50 text-red-500 border-red-100"
+                                  : order.status === "delivered"
+                                    ? "bg-green-50 text-green-600 border-green-100"
+                                    : "bg-pink-50 text-theme-brand border-pink-100 focus:ring-1 focus:ring-theme-brand"
+                              }`}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="processing">Processing</option>
+                              <option value="shipped">Shipped</option>
+                              <option value="delivered">Delivered</option>
+                              <option value="cancelled">Cancelled</option>
+                            </select>
                           </td>
                           <td className="p-5 font-bold text-base text-right text-theme-brand">
                             Rs. {sellerSubtotal.toFixed(2)}
@@ -1086,6 +1262,43 @@ export function Sellers() {
                     className="w-full px-5 py-3 rounded-2xl border border-gray-100 bg-theme-bg focus:border-theme-brand focus:bg-white outline-none font-semibold transition-all resize-none text-sm"
                   ></textarea>
                 </div>
+
+                {tempImageUrls.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">
+                      Choose Hero Image (First is Hero)
+                    </label>
+                    <div className="flex flex-wrap gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                      {tempImageUrls.map((url, idx) => (
+                        <div key={idx} className="relative flex flex-col items-center">
+                          <img
+                            src={url}
+                            alt="Product Thumbnail"
+                            className={`w-20 h-20 object-cover rounded-xl border-2 ${
+                              idx === 0 ? "border-theme-brand shadow-md" : "border-transparent"
+                            }`}
+                          />
+                          {idx === 0 ? (
+                            <span className="text-[10px] font-bold text-theme-brand bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100 mt-1">
+                              ✨ Hero
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const reordered = [tempImageUrls[idx], ...tempImageUrls.filter((_, i) => i !== idx)];
+                                setTempImageUrls(reordered);
+                              }}
+                              className="text-[10px] font-bold text-gray-500 hover:text-theme-brand bg-white px-2 py-0.5 rounded-full border border-gray-100 mt-1 cursor-pointer transition-colors hover:border-pink-200"
+                            >
+                              Set Hero
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">
